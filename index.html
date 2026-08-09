@@ -92,7 +92,6 @@
     display: block;
     width: 100%;
     height: auto;
-    aspect-ratio: 16 / 10;
   }
 
   .dropzone {
@@ -189,6 +188,25 @@
     letter-spacing: 0.05em;
   }
 
+  select {
+    width: 100%;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.03em;
+    color: var(--text);
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 10px 12px;
+    cursor: pointer;
+    appearance: none;
+    background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+    background-position: calc(100% - 18px) center, calc(100% - 13px) center;
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+  }
+  select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
   .btn {
     font-family: 'IBM Plex Mono', monospace;
     font-size: 12px;
@@ -242,7 +260,7 @@
     <div class="frame-col">
       <div class="sprockets top"></div>
       <div class="canvas-shell">
-        <canvas id="canvas" width="1280" height="800"></canvas>
+        <canvas id="canvas" width="1280" height="720"></canvas>
         <div class="hud" id="hud">1.00×</div>
         <div class="dropzone" id="dropzone">
           <div class="icon">＋</div>
@@ -254,6 +272,16 @@
 
     <div class="panel">
       <input type="file" id="fileInput" accept="image/*">
+
+      <div class="field">
+        <label>Formato</label>
+        <select id="aspect">
+          <option value="1280,720">YouTube / paisagem — 16:9</option>
+          <option value="720,1280">TikTok / Reels / Stories — 9:16</option>
+          <option value="1080,1080">Instagram feed (quadrado) — 1:1</option>
+          <option value="1080,1350">Instagram feed (retrato) — 4:5</option>
+        </select>
+      </div>
 
       <div class="field">
         <label>Intensidade <span class="val" id="intensityVal">40%</span></label>
@@ -291,6 +319,7 @@
   const hud = document.getElementById('hud');
   const intensitySlider = document.getElementById('intensity');
   const speedSlider = document.getElementById('speed');
+  const aspectSelect = document.getElementById('aspect');
   const intensityVal = document.getElementById('intensityVal');
   const speedVal = document.getElementById('speedVal');
   const playPauseBtn = document.getElementById('playPause');
@@ -349,6 +378,28 @@
     const speed = Number(speedSlider.value);
     duration = lerp(16000, 3500, speed / 100);
   }
+
+  function applyAspect() {
+    const [w, h] = aspectSelect.value.split(',').map(Number);
+    canvas.width = w;
+    canvas.height = h;
+    canvas.style.aspectRatio = w + ' / ' + h;
+    if (img) {
+      cover = computeCover(img.naturalWidth, img.naturalHeight, canvas.width, canvas.height);
+      current = { zoom: zoomBounds()[0], cx: 0.5, cy: 0.5 };
+      target = randomView(current);
+      pausedElapsed = 0;
+      startTime = null;
+      drawView(current);
+    }
+  }
+
+  aspectSelect.addEventListener('change', () => {
+    const wasPlaying = isPlaying;
+    if (isPlaying) pause();
+    applyAspect();
+    if (wasPlaying) play();
+  });
 
   function drawView(view) {
     const w = cover.cropW / view.zoom;
@@ -523,6 +574,7 @@
   });
 
   updateDuration();
+  applyAspect();
 })();
 </script>
 </body>
