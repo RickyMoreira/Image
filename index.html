@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Movimento — anime suas fotos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #14100D;
+    --panel: #1D1712;
+    --panel-2: #251C15;
+    --line: #3A2E24;
+    --accent: #D14B2A;
+    --accent-dim: #7A2E20;
+    --text: #EFE6D8;
+    --muted: #9C8F7E;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Mono', monospace;
+    min-height: 100vh;
+    padding: 32px 20px 60px;
+  }
+
+  .wrap { max-width: 980px; margin: 0 auto; }
+
+  header { margin-bottom: 28px; }
+
+  .eyebrow {
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 6px;
+  }
+
+  h1 {
+    font-family: 'Fraunces', serif;
+    font-optical-sizing: auto;
+    font-weight: 600;
+    font-size: clamp(32px, 5vw, 48px);
+    margin: 0 0 8px;
+    letter-spacing: -0.01em;
+  }
+
+  .sub {
+    color: var(--muted);
+    font-size: 13px;
+    margin: 0;
+    max-width: 46ch;
+    line-height: 1.6;
+  }
+
+  .stage {
+    display: flex;
+    gap: 20px;
+    margin-top: 32px;
+    align-items: stretch;
+  }
+
+  @media (max-width: 780px) {
+    .stage { flex-direction: column; }
+  }
+
+  .frame-col { flex: 1 1 60%; min-width: 0; }
+
+  .sprockets {
+    height: 12px;
+    background-color: var(--accent);
+    background-image: radial-gradient(circle, var(--bg) 2.6px, transparent 3px);
+    background-size: 22px 12px;
+    background-position: 10px center;
+  }
+  .sprockets.bottom { border-radius: 0 0 3px 3px; }
+  .sprockets.top { border-radius: 3px 3px 0 0; }
+
+  .canvas-shell {
+    position: relative;
+    background: #0A0807;
+    border-left: 1px solid var(--line);
+    border-right: 1px solid var(--line);
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 16 / 10;
+  }
+
+  .dropzone {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    cursor: pointer;
+    text-align: center;
+    padding: 20px;
+    color: var(--muted);
+    font-size: 13px;
+    transition: background 0.15s ease;
+  }
+  .dropzone:hover { background: rgba(209, 75, 42, 0.06); }
+  .dropzone.hidden { display: none; }
+  .dropzone .icon {
+    width: 40px; height: 40px;
+    border: 1.5px solid var(--muted);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+  }
+
+  .hud {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    color: var(--accent);
+    background: rgba(10,8,7,0.55);
+    padding: 3px 8px;
+    border-radius: 2px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+  .hud.visible { opacity: 1; }
+
+  .panel {
+    flex: 1 1 34%;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+  }
+
+  .field label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+  .field label span.val { color: var(--accent); }
+
+  input[type="range"] {
+    -webkit-appearance: none;
+    width: 100%;
+    height: 3px;
+    background: var(--line);
+    border-radius: 2px;
+    outline: none;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 15px; height: 15px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 2px solid var(--bg);
+    cursor: pointer;
+    margin-top: -6px;
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 15px; height: 15px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 2px solid var(--bg);
+    cursor: pointer;
+  }
+  input[type="range"]::-webkit-slider-runnable-track { height: 3px; border-radius: 2px; }
+  .scale-labels {
+    display: flex; justify-content: space-between;
+    font-size: 10px; color: var(--muted); margin-top: 6px;
+    letter-spacing: 0.05em;
+  }
+
+  .btn {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 11px 16px;
+    border-radius: 3px;
+    border: 1px solid var(--line);
+    background: var(--panel-2);
+    color: var(--text);
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+    text-align: center;
+  }
+  .btn:hover:not(:disabled) { border-color: var(--accent); }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #1A0F0A; font-weight: 600; }
+  .btn.primary:hover:not(:disabled) { background: #E0603A; }
+
+  .row { display: flex; gap: 10px; }
+  .row .btn { flex: 1; }
+
+  input[type="file"] { display: none; }
+
+  .status {
+    font-size: 11px;
+    color: var(--muted);
+    min-height: 14px;
+    letter-spacing: 0.02em;
+  }
+  .status.active { color: var(--accent); }
+
+  footer {
+    margin-top: 26px;
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.02em;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Câmera lenta / 01</p>
+    <h1>Movimento</h1>
+    <p class="sub">Transforma uma foto parada em panorâmica com zoom contínuo — o mesmo efeito usado em documentários e slideshows. Ajuste intensidade e velocidade e baixe o vídeo.</p>
+  </header>
+
+  <div class="stage">
+    <div class="frame-col">
+      <div class="sprockets top"></div>
+      <div class="canvas-shell">
+        <canvas id="canvas" width="1280" height="800"></canvas>
+        <div class="hud" id="hud">1.00×</div>
+        <div class="dropzone" id="dropzone">
+          <div class="icon">＋</div>
+          <div>Solte uma foto aqui<br>ou clique para escolher</div>
+        </div>
+      </div>
+      <div class="sprockets bottom"></div>
+    </div>
+
+    <div class="panel">
+      <input type="file" id="fileInput" accept="image/*">
+
+      <div class="field">
+        <label>Intensidade <span class="val" id="intensityVal">40%</span></label>
+        <input type="range" id="intensity" min="0" max="100" value="40">
+        <div class="scale-labels"><span>Sutil</span><span>Intenso</span></div>
+      </div>
+
+      <div class="field">
+        <label>Velocidade <span class="val" id="speedVal">50%</span></label>
+        <input type="range" id="speed" min="0" max="100" value="50">
+        <div class="scale-labels"><span>Devagar</span><span>Rápido</span></div>
+      </div>
+
+      <div class="row">
+        <button class="btn" id="playPause" disabled>Pausar</button>
+        <button class="btn" id="newPhoto" disabled>Nova foto</button>
+      </div>
+
+      <button class="btn primary" id="record" disabled>Baixar vídeo (.webm)</button>
+
+      <div class="status" id="status">Escolha uma foto para começar.</div>
+    </div>
+  </div>
+
+  <footer>Roda inteiramente no navegador — nenhuma imagem é enviada a servidores.</footer>
+</div>
+
+<script>
+(function () {
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const dropzone = document.getElementById('dropzone');
+  const fileInput = document.getElementById('fileInput');
+  const hud = document.getElementById('hud');
+  const intensitySlider = document.getElementById('intensity');
+  const speedSlider = document.getElementById('speed');
+  const intensityVal = document.getElementById('intensityVal');
+  const speedVal = document.getElementById('speedVal');
+  const playPauseBtn = document.getElementById('playPause');
+  const newPhotoBtn = document.getElementById('newPhoto');
+  const recordBtn = document.getElementById('record');
+  const statusEl = document.getElementById('status');
+
+  let img = null;
+  let cover = null; // {cropX, cropY, cropW, cropH}
+  let current = null, target = null;
+  let startTime = null, pausedElapsed = 0, rafId = null;
+  let isPlaying = false;
+  let duration = 8000; // ms, driven by speed slider
+
+  function lerp(a, b, t) { return a + (b - a) * t; }
+  function easeInOutSine(t) { return -(Math.cos(Math.PI * t) - 1) / 2; }
+
+  function computeCover(imgW, imgH, cw, ch) {
+    const imgRatio = imgW / imgH;
+    const canvasRatio = cw / ch;
+    let cropW, cropH;
+    if (imgRatio > canvasRatio) {
+      cropH = imgH;
+      cropW = imgH * canvasRatio;
+    } else {
+      cropW = imgW;
+      cropH = imgW / canvasRatio;
+    }
+    return {
+      cropX: (imgW - cropW) / 2,
+      cropY: (imgH - cropH) / 2,
+      cropW, cropH
+    };
+  }
+
+  function zoomBounds() {
+    const intensity = Number(intensitySlider.value);
+    const minZ = 1 + (intensity / 100) * 0.08;
+    const maxZ = 1 + (intensity / 100) * 0.55;
+    return [Math.max(1.01, minZ), Math.max(1.06, maxZ)];
+  }
+
+  function randomView(prev) {
+    const [minZ, maxZ] = zoomBounds();
+    let zoom, cx, cy;
+    do {
+      zoom = minZ + Math.random() * (maxZ - minZ);
+      cx = Math.random();
+      cy = Math.random();
+    } while (prev && Math.abs(zoom - prev.zoom) < 0.03 && Math.hypot(cx - prev.cx, cy - prev.cy) < 0.2);
+    return { zoom, cx, cy };
+  }
+
+  function updateDuration() {
+    const speed = Number(speedSlider.value);
+    duration = lerp(16000, 3500, speed / 100);
+  }
+
+  function drawView(view) {
+    const w = cover.cropW / view.zoom;
+    const h = cover.cropH / view.zoom;
+    const x = cover.cropX + (cover.cropW - w) * view.cx;
+    const y = cover.cropY + (cover.cropH - h) * view.cy;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, x, y, w, h, 0, 0, canvas.width, canvas.height);
+    hud.textContent = view.zoom.toFixed(2) + '×';
+  }
+
+  function tick(now) {
+    if (startTime === null) startTime = now - pausedElapsed;
+    let elapsed = now - startTime;
+    let t = Math.min(elapsed / duration, 1);
+    const e = easeInOutSine(t);
+    const view = {
+      zoom: lerp(current.zoom, target.zoom, e),
+      cx: lerp(current.cx, target.cx, e),
+      cy: lerp(current.cy, target.cy, e)
+    };
+    drawView(view);
+    if (t >= 1) {
+      current = target;
+      target = randomView(current);
+      startTime = now;
+      pausedElapsed = 0;
+    }
+    if (isPlaying) rafId = requestAnimationFrame(tick);
+  }
+
+  function play() {
+    if (!img || isPlaying) return;
+    isPlaying = true;
+    playPauseBtn.textContent = 'Pausar';
+    startTime = null;
+    rafId = requestAnimationFrame(tick);
+  }
+
+  function pause() {
+    if (!isPlaying) return;
+    isPlaying = false;
+    playPauseBtn.textContent = 'Reproduzir';
+    cancelAnimationFrame(rafId);
+    if (startTime !== null) pausedElapsed = performance.now() - startTime;
+  }
+
+  function loadImage(file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const image = new Image();
+      image.onload = () => {
+        img = image;
+        cover = computeCover(img.naturalWidth, img.naturalHeight, canvas.width, canvas.height);
+        current = { zoom: zoomBounds()[0], cx: 0.5, cy: 0.5 };
+        target = randomView(current);
+        updateDuration();
+        dropzone.classList.add('hidden');
+        hud.classList.add('visible');
+        playPauseBtn.disabled = false;
+        newPhotoBtn.disabled = false;
+        recordBtn.disabled = !supportsRecording();
+        statusEl.textContent = supportsRecording()
+          ? 'Pronto. Ajuste os controles ou baixe o vídeo.'
+          : 'Pronto para pré-visualizar. Gravação não é suportada neste navegador.';
+        statusEl.classList.remove('active');
+        play();
+      };
+      image.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  dropzone.addEventListener('click', () => fileInput.click());
+  dropzone.addEventListener('dragover', (e) => { e.preventDefault(); });
+  dropzone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) loadImage(file);
+  });
+  fileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) loadImage(file);
+  });
+
+  newPhotoBtn.addEventListener('click', () => {
+    pause();
+    img = null;
+    dropzone.classList.remove('hidden');
+    hud.classList.remove('visible');
+    playPauseBtn.disabled = true;
+    newPhotoBtn.disabled = true;
+    recordBtn.disabled = true;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    statusEl.textContent = 'Escolha uma foto para começar.';
+    statusEl.classList.remove('active');
+    fileInput.value = '';
+  });
+
+  playPauseBtn.addEventListener('click', () => { isPlaying ? pause() : play(); });
+
+  intensitySlider.addEventListener('input', () => {
+    intensityVal.textContent = intensitySlider.value + '%';
+  });
+  speedSlider.addEventListener('input', () => {
+    speedVal.textContent = speedSlider.value + '%';
+    updateDuration();
+  });
+
+  function supportsRecording() {
+    return !!(canvas.captureStream && window.MediaRecorder);
+  }
+
+  function pickMimeType() {
+    const options = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
+    for (const o of options) {
+      if (MediaRecorder.isTypeSupported(o)) return o;
+    }
+    return '';
+  }
+
+  recordBtn.addEventListener('click', () => {
+    if (!img || !supportsRecording()) return;
+    recordBtn.disabled = true;
+    playPauseBtn.disabled = true;
+    newPhotoBtn.disabled = true;
+    statusEl.textContent = 'Gravando...';
+    statusEl.classList.add('active');
+
+    if (!isPlaying) play();
+
+    const stream = canvas.captureStream(30);
+    const mimeType = pickMimeType();
+    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+    const chunks = [];
+    recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+    recorder.onstop = () => {
+      const blob = new Blob(chunks, { type: 'video/webm' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'movimento.webm';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+      recordBtn.disabled = false;
+      playPauseBtn.disabled = false;
+      newPhotoBtn.disabled = false;
+      statusEl.textContent = 'Vídeo baixado.';
+      statusEl.classList.remove('active');
+    };
+
+    recorder.start();
+    setTimeout(() => recorder.stop(), Math.max(3000, duration));
+  });
+
+  updateDuration();
+})();
+</script>
+</body>
+</html>
