@@ -260,7 +260,7 @@
     <div class="frame-col">
       <div class="sprockets top"></div>
       <div class="canvas-shell">
-        <canvas id="canvas" width="1280" height="720"></canvas>
+        <canvas id="canvas" width="1920" height="1080"></canvas>
         <div class="hud" id="hud">1.00×</div>
         <div class="dropzone" id="dropzone">
           <div class="icon">＋</div>
@@ -276,10 +276,10 @@
       <div class="field">
         <label>Formato</label>
         <select id="aspect">
-          <option value="1280,720">YouTube / paisagem — 16:9</option>
-          <option value="720,1280">TikTok / Reels / Stories — 9:16</option>
-          <option value="1080,1080">Instagram feed (quadrado) — 1:1</option>
-          <option value="1080,1350">Instagram feed (retrato) — 4:5</option>
+          <option value="1920,1080">YouTube / paisagem — 16:9 (1920×1080)</option>
+          <option value="1080,1920">TikTok / Reels / Stories — 9:16 (1080×1920)</option>
+          <option value="1080,1080">Instagram feed (quadrado) — 1:1 (1080×1080)</option>
+          <option value="1080,1350">Instagram feed (retrato) — 4:5 (1080×1350)</option>
         </select>
       </div>
 
@@ -541,11 +541,19 @@
     if (!img || !supportsRecording()) return;
     recordBtn.disabled = true;
     playPauseBtn.disabled = true;
+    resetBtn.disabled = true;
     newPhotoBtn.disabled = true;
     statusEl.textContent = 'Gravando...';
     statusEl.classList.add('active');
 
-    if (!isPlaying) play();
+    // garante que a gravação sempre começa do zoom mínimo (imagem totalmente aberta)
+    pause();
+    current = { zoom: zoomBounds()[0], cx: 0.5, cy: 0.5 };
+    target = randomView(current);
+    pausedElapsed = 0;
+    startTime = null;
+    drawView(current);
+    play();
 
     const stream = canvas.captureStream(30);
     const mimeType = pickMimeType();
@@ -564,6 +572,7 @@
       setTimeout(() => URL.revokeObjectURL(url), 2000);
       recordBtn.disabled = false;
       playPauseBtn.disabled = false;
+      resetBtn.disabled = false;
       newPhotoBtn.disabled = false;
       statusEl.textContent = 'Vídeo baixado.';
       statusEl.classList.remove('active');
