@@ -269,8 +269,9 @@
 
       <div class="row">
         <button class="btn" id="playPause" disabled>Pausar</button>
-        <button class="btn" id="newPhoto" disabled>Nova foto</button>
+        <button class="btn" id="reset" disabled>Reiniciar</button>
       </div>
+      <button class="btn" id="newPhoto" disabled>Nova foto</button>
 
       <button class="btn primary" id="record" disabled>Baixar vídeo (.webm)</button>
 
@@ -293,6 +294,7 @@
   const intensityVal = document.getElementById('intensityVal');
   const speedVal = document.getElementById('speedVal');
   const playPauseBtn = document.getElementById('playPause');
+  const resetBtn = document.getElementById('reset');
   const newPhotoBtn = document.getElementById('newPhoto');
   const recordBtn = document.getElementById('record');
   const statusEl = document.getElementById('status');
@@ -407,6 +409,7 @@
         dropzone.classList.add('hidden');
         hud.classList.add('visible');
         playPauseBtn.disabled = false;
+        resetBtn.disabled = false;
         newPhotoBtn.disabled = false;
         recordBtn.disabled = !supportsRecording();
         statusEl.textContent = supportsRecording()
@@ -438,6 +441,7 @@
     dropzone.classList.remove('hidden');
     hud.classList.remove('visible');
     playPauseBtn.disabled = true;
+    resetBtn.disabled = true;
     newPhotoBtn.disabled = true;
     recordBtn.disabled = true;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -447,6 +451,20 @@
   });
 
   playPauseBtn.addEventListener('click', () => { isPlaying ? pause() : play(); });
+
+  resetBtn.addEventListener('click', () => {
+    if (!img) return;
+    const wasPlaying = isPlaying;
+    if (isPlaying) pause();
+    current = { zoom: zoomBounds()[0], cx: 0.5, cy: 0.5 };
+    target = randomView(current);
+    pausedElapsed = 0;
+    startTime = null;
+    drawView(current);
+    statusEl.textContent = 'Reiniciado.';
+    statusEl.classList.remove('active');
+    if (wasPlaying) play();
+  });
 
   intensitySlider.addEventListener('input', () => {
     intensityVal.textContent = intensitySlider.value + '%';
