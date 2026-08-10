@@ -226,6 +226,12 @@
   .btn:disabled { opacity: 0.4; cursor: not-allowed; }
   .btn.primary { background: var(--accent); border-color: var(--accent); color: #1A0F0A; font-weight: 600; }
   .btn.primary:hover:not(:disabled) { background: #E0603A; }
+  .btn.toggle[aria-pressed="true"] {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #1A0F0A;
+    font-weight: 600;
+  }
 
   .row { display: flex; gap: 10px; }
   .row .btn { flex: 1; }
@@ -295,6 +301,11 @@
         <div class="scale-labels"><span>Devagar</span><span>Rápido</span></div>
       </div>
 
+      <div class="field">
+        <label>Efeito</label>
+        <button class="btn toggle" id="filmEffect" type="button" aria-pressed="false">Filme antigo</button>
+      </div>
+
       <div class="row">
         <button class="btn" id="playPause" disabled>Pausar</button>
         <button class="btn" id="reset" disabled>Reiniciar</button>
@@ -326,7 +337,11 @@
   const resetBtn = document.getElementById('reset');
   const newPhotoBtn = document.getElementById('newPhoto');
   const recordBtn = document.getElementById('record');
+  const filmEffectBtn = document.getElementById('filmEffect');
   const statusEl = document.getElementById('status');
+
+  let oldFilmEnabled = false;
+  let grainTiles = [];
 
   let img = null;
   let cover = null; // {cropX, cropY, cropW, cropH}
@@ -337,6 +352,69 @@
 
   function lerp(a, b, t) { return a + (b - a) * t; }
   function easeInOutSine(t) { return -(Math.cos(Math.PI * t) - 1) / 2; }
+  function pseudoRandom(seed) {
+    const x = Math.sin(seed * 12.9898) * 43758.5453;
+    return x - Math.floor(x);
+  }
+
+  function buildGrainTiles() {
+    grainTiles = [];
+    const w = 320, h = 180;
+    for (let i = 0; i < 6; i++) {
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      const gctx = c.getContext('2d');
+      const data = gctx.createImageData(w, h);
+      for (let p = 0; p < data.data.length; p += 4) {
+        const v = Math.random() * 255;
+        data.data[p] = v; data.data[p + 1] = v; data.data[p + 2] = v;
+        data.data[p + 3] = Math.random() * 45;
+      }
+      gctx.putImageData(data, 0, 0);
+      grainTiles.push(c);
+    }
+  }
+
+  function renderFilmEffect() {
+    const w = canvas.width, h = canvas.height;
+
+    const flicker = 0.03 + Math.random() * 0.06;
+    ctx.fillStyle = Math.random() < 0.5 ? 'rgba(0,0,0,' + flicker + ')' : 'rgba(255,255,255,' + (flicker * 0.5) + ')';
+    ctx.fillRect(0, 0, w, h);
+
+    const tile = grainTiles[Math.floor(Math.random() * grainTiles.length)];
+    ctx.globalAlpha = 0.5;
+    ctx.drawImage(tile, 0, 0, w, h);
+    ctx.globalAlpha = 1;
+
+    if (Math.random() < 0.35) {
+      const scratches = 1 + Math.floor(Math.random() * 2);
+      for (let i = 0; i < scratches; i++) {
+        const x = Math.random() * w;
+        const segH = h * (0.3 + Math.random() * 0.7);
+        const y = Math.random() * (h - segH);
+        ctx.strokeStyle = 'rgba(255,255,255,' + (0.15 + Math.random() * 0.25) + ')';
+        ctx.lineWidth = 1 + Math.random();
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + (Math.random() - 0.5) * 4, y + segH);
+        ctx.stroke();
+      }
+    }
+
+    const dustCount = Math.floor(Math.random() * 4);
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    for (let i = 0; i < dustCount; i++) {
+      const dx = Math.random() * w, dy = Math.random() * h, r = 1 + Math.random() * 1.5;
+      ctx.beginPath(); ctx.arc(dx, dy, r, 0, Math.PI * 2); ctx.fill();
+    }
+
+    const grad = ctx.createRadialGradient(w / 2, h / 2, h * 0.25, w / 2, h / 2, h * 0.75);
+    grad.addColorStop(0, 'rgba(0,0,0,0)');
+    grad.addColorStop(1, 'rgba(0,0,0,0.55)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+  }
 
   function computeCover(imgW, imgH, cw, ch) {
     const imgRatio = imgW / imgH;
@@ -386,7 +464,7 @@
     canvas.style.aspectRatio = w + ' / ' + h;
     if (img) {
       cover = computeCover(img.naturalWidth, img.naturalHeight, canvas.width, canvas.height);
-      current = { zoom: zoomBounds()[0], cx: 0.5, cy: 0.5 };
+      current = { zoom: 1, cx: 0.5, cy: 0.5 };
       target = randomView(current);
       pausedElapsed = 0;
       startTime = null;
@@ -407,7 +485,17 @@
     const x = cover.cropX + (cover.cropW - w) * view.cx;
     const y = cover.cropY + (cover.cropH - h) * view.cy;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(img, x, y, w, h, 0, 0, canvas.width, canvas.height);
+    ctx.save();
+    let jx = 0, jy = 0;
+    if (oldFilmEnabled) {
+      ctx.filter = 'sepia(0.35) contrast(1.08) saturate(0.75) brightness(0.97)';
+      const bucket = Math.floor(performance.now() / 70);
+      jx = (pseudoRandom(bucket) - 0.5) * 6;
+      jy = (pseudoRandom(bucket + 99) - 0.5) * 6;
+    }
+    ctx.drawImage(img, x, y, w, h, jx, jy, canvas.width, canvas.height);
+    ctx.restore();
+    if (oldFilmEnabled) renderFilmEffect();
     hud.textContent = view.zoom.toFixed(2) + '×';
   }
 
@@ -454,7 +542,7 @@
       image.onload = () => {
         img = image;
         cover = computeCover(img.naturalWidth, img.naturalHeight, canvas.width, canvas.height);
-        current = { zoom: zoomBounds()[0], cx: 0.5, cy: 0.5 };
+        current = { zoom: 1, cx: 0.5, cy: 0.5 };
         target = randomView(current);
         updateDuration();
         dropzone.classList.add('hidden');
@@ -503,11 +591,17 @@
 
   playPauseBtn.addEventListener('click', () => { isPlaying ? pause() : play(); });
 
+  filmEffectBtn.addEventListener('click', () => {
+    oldFilmEnabled = !oldFilmEnabled;
+    filmEffectBtn.setAttribute('aria-pressed', String(oldFilmEnabled));
+    if (img && !isPlaying) drawView(current);
+  });
+
   resetBtn.addEventListener('click', () => {
     if (!img) return;
     const wasPlaying = isPlaying;
     if (isPlaying) pause();
-    current = { zoom: zoomBounds()[0], cx: 0.5, cy: 0.5 };
+    current = { zoom: 1, cx: 0.5, cy: 0.5 };
     target = randomView(current);
     pausedElapsed = 0;
     startTime = null;
@@ -548,7 +642,7 @@
 
     // garante que a gravação sempre começa do zoom mínimo (imagem totalmente aberta)
     pause();
-    current = { zoom: zoomBounds()[0], cx: 0.5, cy: 0.5 };
+    current = { zoom: 1, cx: 0.5, cy: 0.5 };
     target = randomView(current);
     pausedElapsed = 0;
     startTime = null;
@@ -584,6 +678,7 @@
 
   updateDuration();
   applyAspect();
+  buildGrainTiles();
 })();
 </script>
 </body>
