@@ -111,6 +111,19 @@
   }
   .dropzone:hover { background: rgba(209, 75, 42, 0.06); }
   .dropzone.hidden { display: none; }
+  .hidden { display: none !important; }
+
+  .crop-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 14px;
+    border: 1px solid var(--accent-dim);
+    border-radius: 4px;
+    background: rgba(209, 75, 42, 0.05);
+  }
+
+  canvas { touch-action: none; }
   .dropzone .icon {
     width: 40px; height: 40px;
     border: 1.5px solid var(--muted);
@@ -302,11 +315,28 @@
       </div>
 
       <div class="field">
+        <label>Enquadramento</label>
+        <button class="btn" id="cropStart" type="button" disabled>Cortar foto</button>
+      </div>
+
+      <div class="crop-controls hidden" id="cropControls">
+        <div class="field">
+          <label>Área do corte</label>
+          <input type="range" id="cropSize" min="0" max="100" value="100">
+          <div class="scale-labels"><span>Mais perto</span><span>Foto inteira</span></div>
+        </div>
+        <div class="row">
+          <button class="btn" id="cropCancel" type="button">Cancelar</button>
+          <button class="btn primary" id="cropApply" type="button">Aplicar corte</button>
+        </div>
+      </div>
+
+      <div class="field">
         <label>Efeito</label>
         <button class="btn toggle" id="filmEffect" type="button" aria-pressed="false">Filme antigo</button>
       </div>
 
-      <div class="row">
+      <div class="row" id="playbackRow">
         <button class="btn" id="playPause" disabled>Pausar</button>
         <button class="btn" id="reset" disabled>Reiniciar</button>
       </div>
@@ -339,9 +369,22 @@
   const recordBtn = document.getElementById('record');
   const filmEffectBtn = document.getElementById('filmEffect');
   const statusEl = document.getElementById('status');
+  const cropStartBtn = document.getElementById('cropStart');
+  const cropControls = document.getElementById('cropControls');
+  const cropSizeSlider = document.getElementById('cropSize');
+  const cropCancelBtn = document.getElementById('cropCancel');
+  const cropApplyBtn = document.getElementById('cropApply');
 
   let oldFilmEnabled = false;
   let grainTiles = [];
+
+  let originalImg = null;
+  let cropMode = false, wasPlayingBeforeCrop = false;
+  let cropCenter = { cx: 0.5, cy: 0.5 };
+  let cropMaxRect = null; // base cover rect within originalImg for current output aspect
+  let cropGeom = null;    // display-space geometry, recomputed each crop render
+  let activeCropRectImg = null; // last computed crop rect in original-image pixel space
+  let cropDragging = false, cropDragStart = null, cropDragOrigin = null;
 
   let img = null;
   let cover = null; // {cropX, cropY, cropW, cropH}
@@ -432,6 +475,85 @@
       cropY: (imgH - cropH) / 2,
       cropW, cropH
     };
+  }
+
+  function clamp(v, min, max) { return Math.min(max, Math.max(min, v)); }
+
+  function getCanvasPos(evt) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    return { x: (evt.clientX - rect.left) * scaleX, y: (evt.clientY - rect.top) * scaleY };
+  }
+
+  function drawCropOverlay() {
+    const containScale = Math.min(canvas.width / originalImg.naturalWidth, canvas.height / originalImg.naturalHeight);
+    const dispW = originalImg.naturalWidth * containScale;
+    const dispH = originalImg.naturalHeight * containScale;
+    const dispX = (canvas.width - dispW) / 2;
+    const dispY = (canvas.height - dispH) / 2;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#0A0807';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(originalImg, dispX, dispY, dispW, dispH);
+
+    const scale = lerp(0.25, 1, Number(cropSizeSlider.value) / 100);
+    const cw = cropMaxRect.cropW * scale;
+    const ch = cropMaxRect.cropH * scale;
+    const availX = Math.max(0.001, cropMaxRect.cropW - cw);
+    const availY = Math.max(0.001, cropMaxRect.cropH - ch);
+    const cxImg = cropMaxRect.cropX + availX * cropCenter.cx;
+    const cyImg = cropMaxRect.cropY + availY * cropCenter.cy;
+
+    activeCropRectImg = { x: cxImg, y: cyImg, w: cw, h: ch };
+
+    const rx = dispX + cxImg * containScale;
+    const ry = dispY + cyImg * containScale;
+    const rw = cw * containScale;
+    const rh = ch * containScale;
+
+    cropGeom = { containScale, availX, availY };
+
+    ctx.fillStyle = 'rgba(0,0,0,0.65)';
+    ctx.fillRect(0, 0, canvas.width, ry);
+    ctx.fillRect(0, ry + rh, canvas.width, canvas.height - (ry + rh));
+    ctx.fillRect(0, ry, rx, rh);
+    ctx.fillRect(rx + rw, ry, canvas.width - (rx + rw), rh);
+
+    ctx.strokeStyle = '#D14B2A';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(rx, ry, rw, rh);
+
+    const m = 16;
+    ctx.lineWidth = 4;
+    [[rx, ry, 1, 1], [rx + rw, ry, -1, 1], [rx, ry + rh, 1, -1], [rx + rw, ry + rh, -1, -1]].forEach(([px, py, sx, sy]) => {
+      ctx.beginPath();
+      ctx.moveTo(px, py + m * sy);
+      ctx.lineTo(px, py);
+      ctx.lineTo(px + m * sx, py);
+      ctx.stroke();
+    });
+  }
+
+  function enterCropMode() {
+    if (!originalImg) return;
+    wasPlayingBeforeCrop = isPlaying;
+    if (isPlaying) pause();
+    cropMode = true;
+    cropCenter = { cx: 0.5, cy: 0.5 };
+    cropSizeSlider.value = 100;
+    cropMaxRect = computeCover(originalImg.naturalWidth, originalImg.naturalHeight, canvas.width, canvas.height);
+    cropControls.classList.remove('hidden');
+    [playPauseBtn, resetBtn, newPhotoBtn, recordBtn, cropStartBtn, filmEffectBtn, aspectSelect, intensitySlider, speedSlider].forEach(el => el.disabled = true);
+    drawCropOverlay();
+  }
+
+  function exitCropMode() {
+    cropMode = false;
+    cropControls.classList.add('hidden');
+    [playPauseBtn, resetBtn, newPhotoBtn, cropStartBtn, filmEffectBtn, aspectSelect, intensitySlider, speedSlider].forEach(el => el.disabled = false);
+    recordBtn.disabled = !supportsRecording();
   }
 
   function zoomBounds() {
@@ -540,6 +662,7 @@
     reader.onload = (e) => {
       const image = new Image();
       image.onload = () => {
+        originalImg = image;
         img = image;
         cover = computeCover(img.naturalWidth, img.naturalHeight, canvas.width, canvas.height);
         current = { zoom: 1, cx: 0.5, cy: 0.5 };
@@ -550,6 +673,7 @@
         playPauseBtn.disabled = false;
         resetBtn.disabled = false;
         newPhotoBtn.disabled = false;
+        cropStartBtn.disabled = false;
         recordBtn.disabled = !supportsRecording();
         statusEl.textContent = supportsRecording()
           ? 'Pronto. Ajuste os controles ou baixe o vídeo.'
@@ -577,11 +701,13 @@
   newPhotoBtn.addEventListener('click', () => {
     pause();
     img = null;
+    originalImg = null;
     dropzone.classList.remove('hidden');
     hud.classList.remove('visible');
     playPauseBtn.disabled = true;
     resetBtn.disabled = true;
     newPhotoBtn.disabled = true;
+    cropStartBtn.disabled = true;
     recordBtn.disabled = true;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     statusEl.textContent = 'Escolha uma foto para começar.';
@@ -596,6 +722,59 @@
     filmEffectBtn.setAttribute('aria-pressed', String(oldFilmEnabled));
     if (img && !isPlaying) drawView(current);
   });
+
+  cropStartBtn.addEventListener('click', enterCropMode);
+
+  cropSizeSlider.addEventListener('input', () => { if (cropMode) drawCropOverlay(); });
+
+  cropCancelBtn.addEventListener('click', () => {
+    exitCropMode();
+    drawView(current);
+    if (wasPlayingBeforeCrop) play();
+  });
+
+  cropApplyBtn.addEventListener('click', () => {
+    if (!activeCropRectImg) return;
+    const r = activeCropRectImg;
+    const off = document.createElement('canvas');
+    off.width = Math.max(1, Math.round(r.w));
+    off.height = Math.max(1, Math.round(r.h));
+    off.getContext('2d').drawImage(originalImg, r.x, r.y, r.w, r.h, 0, 0, off.width, off.height);
+    const cropped = new Image();
+    cropped.onload = () => {
+      img = cropped;
+      cover = computeCover(img.naturalWidth, img.naturalHeight, canvas.width, canvas.height);
+      current = { zoom: 1, cx: 0.5, cy: 0.5 };
+      target = randomView(current);
+      pausedElapsed = 0;
+      startTime = null;
+      exitCropMode();
+      drawView(current);
+      statusEl.textContent = 'Corte aplicado.';
+      statusEl.classList.remove('active');
+      if (wasPlayingBeforeCrop) play();
+    };
+    cropped.src = off.toDataURL('image/png');
+  });
+
+  canvas.addEventListener('pointerdown', (e) => {
+    if (!cropMode) return;
+    cropDragging = true;
+    cropDragStart = getCanvasPos(e);
+    cropDragOrigin = { cx: cropCenter.cx, cy: cropCenter.cy };
+    canvas.setPointerCapture(e.pointerId);
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    if (!cropMode || !cropDragging || !cropGeom) return;
+    const pos = getCanvasPos(e);
+    const dxImg = (pos.x - cropDragStart.x) / cropGeom.containScale;
+    const dyImg = (pos.y - cropDragStart.y) / cropGeom.containScale;
+    cropCenter.cx = clamp(cropDragOrigin.cx + dxImg / cropGeom.availX, 0, 1);
+    cropCenter.cy = clamp(cropDragOrigin.cy + dyImg / cropGeom.availY, 0, 1);
+    drawCropOverlay();
+  });
+  canvas.addEventListener('pointerup', () => { cropDragging = false; });
+  canvas.addEventListener('pointerleave', () => { cropDragging = false; });
 
   resetBtn.addEventListener('click', () => {
     if (!img) return;
