@@ -373,9 +373,24 @@
       </div>
 
       <div class="field">
-        <label>Velocidade <span class="val" id="speedVal">50%</span></label>
+        <label>Velocidade (padrão p/ novas fotos) <span class="val" id="speedVal">50%</span></label>
         <input type="range" id="speed" min="0" max="100" value="50">
         <div class="scale-labels"><span>Devagar</span><span>Rápido</span></div>
+      </div>
+
+      <div class="field">
+        <label>Duração da foto selecionada <span class="val" id="photoDurationVal">8.0s</span></label>
+        <input type="range" id="photoDuration" min="2" max="20" step="0.5" value="8" disabled>
+        <div class="scale-labels"><span>2s</span><span>20s</span></div>
+      </div>
+
+      <div class="field">
+        <label>Transição</label>
+        <select id="transitionType">
+          <option value="fade">Fade (dissolver)</option>
+          <option value="slide">Deslizar</option>
+          <option value="cut">Corte seco</option>
+        </select>
       </div>
 
       <div class="field">
@@ -424,6 +439,9 @@
   const thumbRow = document.getElementById('thumbRow');
   const intensitySlider = document.getElementById('intensity');
   const speedSlider = document.getElementById('speed');
+  const photoDurationSlider = document.getElementById('photoDuration');
+  const photoDurationVal = document.getElementById('photoDurationVal');
+  const transitionSelect = document.getElementById('transitionType');
   const aspectSelect = document.getElementById('aspect');
   const intensityVal = document.getElementById('intensityVal');
   const speedVal = document.getElementById('speedVal');
@@ -441,6 +459,7 @@
   const cropTargetVal = document.getElementById('cropTargetVal');
 
   const TRANSITION_MS = 700;
+  let transitionType = 'fade'; // 'fade' | 'slide' | 'cut'
 
   let oldFilmEnabled = false;
   let oldTvEnabled = false;
@@ -607,6 +626,7 @@
   function resetPhotoView(photo) {
     photo.current = { zoom: 1, cx: 0.5, cy: 0.5 };
     photo.target = randomView(photo.current);
+    if (photo.durationMs === undefined) photo.durationMs = duration;
   }
 
   function resetSequence() {
@@ -653,7 +673,7 @@
   function tick(now) {
     if (phaseStart === null) phaseStart = now - pausedElapsed;
     const elapsed = now - phaseStart;
-    const activeDuration = sequencePhase === 'transition' ? TRANSITION_MS : duration;
+    const activeDuration = sequencePhase === 'transition' ? TRANSITION_MS : photos[currentIndex].durationMs;
     const t = Math.min(elapsed / activeDuration, 1);
     const e = easeInOutSine(t);
 
@@ -672,11 +692,22 @@
     } else {
       const pA = photos[currentIndex];
       const pB = photos[nextIndex];
-      renderPhotoFrame(pA, pA.target);
-      ctx.save();
-      ctx.globalAlpha = e;
-      renderPhotoFrame(pB, pB.current);
-      ctx.restore();
+      if (transitionType === 'slide') {
+        ctx.save();
+        ctx.translate(-e * canvas.width, 0);
+        renderPhotoFrame(pA, pA.target);
+        ctx.restore();
+        ctx.save();
+        ctx.translate((1 - e) * canvas.width, 0);
+        renderPhotoFrame(pB, pB.current);
+        ctx.restore();
+      } else {
+        renderPhotoFrame(pA, pA.target);
+        ctx.save();
+        ctx.globalAlpha = e;
+        renderPhotoFrame(pB, pB.current);
+        ctx.restore();
+      }
       hudZoom = pB.current.zoom;
     }
 
@@ -691,7 +722,11 @@
         if (photos.length > 1) {
           nextIndex = (currentIndex + 1) % photos.length;
           resetPhotoView(photos[nextIndex]);
-          sequencePhase = 'transition';
+          if (transitionType === 'cut') {
+            currentIndex = nextIndex;
+          } else {
+            sequencePhase = 'transition';
+          }
         } else {
           p.target = randomView(p.current);
         }
@@ -722,14 +757,23 @@
     if (phaseStart !== null) pausedElapsed = performance.now() - phaseStart;
   }
 
+  function syncDurationInput() {
+    if (!photos.length) return;
+    const ms = photos[selectedIndex].durationMs || duration;
+    photoDurationSlider.value = (ms / 1000).toFixed(1);
+    photoDurationVal.textContent = (ms / 1000).toFixed(1) + 's';
+  }
+
   function updateControlsAvailability() {
     const has = photos.length > 0;
     playPauseBtn.disabled = !has;
     resetBtn.disabled = !has;
     clearAllBtn.disabled = !has;
     cropStartBtn.disabled = !has;
+    photoDurationSlider.disabled = !has;
     recordBtn.disabled = !has || !supportsRecording();
     cropTargetVal.textContent = has ? '#' + (selectedIndex + 1) : '';
+    syncDurationInput();
   }
 
   function renderThumbs() {
@@ -885,6 +929,19 @@
   speedSlider.addEventListener('input', () => {
     speedVal.textContent = speedSlider.value + '%';
     updateDuration();
+    photos.forEach(p => { p.durationMs = duration; });
+    syncDurationInput();
+  });
+
+  photoDurationSlider.addEventListener('input', () => {
+    if (!photos.length) return;
+    const seconds = Number(photoDurationSlider.value);
+    photos[selectedIndex].durationMs = seconds * 1000;
+    photoDurationVal.textContent = seconds.toFixed(1) + 's';
+  });
+
+  transitionSelect.addEventListener('change', () => {
+    transitionType = transitionSelect.value;
   });
 
   function applyAspect() {
@@ -1036,7 +1093,7 @@
     const original = photos[selectedIndex].original;
     cropRect = { x: 0, y: 0, w: original.naturalWidth, h: original.naturalHeight };
     cropControls.classList.remove('hidden');
-    [playPauseBtn, resetBtn, clearAllBtn, recordBtn, cropStartBtn, filmEffectBtn, tvEffectBtn, aspectSelect, intensitySlider, speedSlider].forEach(el => el.disabled = true);
+    [playPauseBtn, resetBtn, clearAllBtn, recordBtn, cropStartBtn, filmEffectBtn, tvEffectBtn, aspectSelect, intensitySlider, speedSlider, photoDurationSlider, transitionSelect].forEach(el => el.disabled = true);
     thumbRow.classList.add('hidden-interact');
     thumbRow.style.pointerEvents = 'none';
     drawCropOverlay();
@@ -1047,7 +1104,8 @@
     cropDragMode = null;
     cropControls.classList.add('hidden');
     thumbRow.style.pointerEvents = '';
-    [playPauseBtn, resetBtn, clearAllBtn, cropStartBtn, filmEffectBtn, tvEffectBtn, aspectSelect, intensitySlider, speedSlider].forEach(el => el.disabled = false);
+    [playPauseBtn, resetBtn, clearAllBtn, cropStartBtn, filmEffectBtn, tvEffectBtn, aspectSelect, intensitySlider, speedSlider, transitionSelect].forEach(el => el.disabled = false);
+    photoDurationSlider.disabled = !photos.length;
     recordBtn.disabled = !supportsRecording();
   }
 
@@ -1145,9 +1203,10 @@
     renderStaticFrame();
     play();
 
+    const transitionMs = transitionType === 'cut' ? 0 : TRANSITION_MS;
     const totalMs = photos.length > 1
-      ? photos.length * (duration + TRANSITION_MS)
-      : duration;
+      ? photos.reduce((sum, p) => sum + p.durationMs, 0) + photos.length * transitionMs
+      : photos[0].durationMs;
 
     const stream = canvas.captureStream(30);
     const mimeType = pickMimeType();
