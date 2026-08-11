@@ -116,11 +116,17 @@
   .crop-controls {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 14px;
     padding: 14px;
     border: 1px solid var(--accent-dim);
     border-radius: 4px;
     background: rgba(209, 75, 42, 0.05);
+  }
+  .crop-hint {
+    margin: 0;
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.5;
   }
 
   canvas { touch-action: none; }
@@ -320,11 +326,7 @@
       </div>
 
       <div class="crop-controls hidden" id="cropControls">
-        <div class="field">
-          <label>Área do corte</label>
-          <input type="range" id="cropSize" min="0" max="100" value="100">
-          <div class="scale-labels"><span>Mais perto</span><span>Foto inteira</span></div>
-        </div>
+        <p class="crop-hint">Arraste os cantos para redimensionar, ou o centro para mover.</p>
         <div class="row">
           <button class="btn" id="cropCancel" type="button">Cancelar</button>
           <button class="btn primary" id="cropApply" type="button">Aplicar corte</button>
@@ -371,7 +373,6 @@
   const statusEl = document.getElementById('status');
   const cropStartBtn = document.getElementById('cropStart');
   const cropControls = document.getElementById('cropControls');
-  const cropSizeSlider = document.getElementById('cropSize');
   const cropCancelBtn = document.getElementById('cropCancel');
   const cropApplyBtn = document.getElementById('cropApply');
 
@@ -380,11 +381,12 @@
 
   let originalImg = null;
   let cropMode = false, wasPlayingBeforeCrop = false;
-  let cropCenter = { cx: 0.5, cy: 0.5 };
-  let cropMaxRect = null; // base cover rect within originalImg for current output aspect
+  let cropRect = null;    // {x,y,w,h} in original-image pixel space
   let cropGeom = null;    // display-space geometry, recomputed each crop render
-  let activeCropRectImg = null; // last computed crop rect in original-image pixel space
-  let cropDragging = false, cropDragStart = null, cropDragOrigin = null;
+  let cropHandles = null; // canvas-space corner points, recomputed each render
+  let cropDragMode = null; // null | 'move' | 'tl' | 'tr' | 'bl' | 'br'
+  let cropDragStartImg = null;  // pointer position in image space at drag start
+  let cropDragOrigRect = null;  // rect snapshot at drag start
 
   let img = null;
   let cover = null; // {cropX, cropY, cropW, cropH}
@@ -486,34 +488,33 @@
     return { x: (evt.clientX - rect.left) * scaleX, y: (evt.clientY - rect.top) * scaleY };
   }
 
+  function imgToCanvasPos(px, py) {
+    return { x: cropGeom.dispX + px * cropGeom.containScale, y: cropGeom.dispY + py * cropGeom.containScale };
+  }
+
+  function canvasToImgPos(pos) {
+    return {
+      x: (pos.x - cropGeom.dispX) / cropGeom.containScale,
+      y: (pos.y - cropGeom.dispY) / cropGeom.containScale
+    };
+  }
+
   function drawCropOverlay() {
     const containScale = Math.min(canvas.width / originalImg.naturalWidth, canvas.height / originalImg.naturalHeight);
     const dispW = originalImg.naturalWidth * containScale;
     const dispH = originalImg.naturalHeight * containScale;
     const dispX = (canvas.width - dispW) / 2;
     const dispY = (canvas.height - dispH) / 2;
+    cropGeom = { containScale, dispX, dispY };
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = '#0A0807';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(originalImg, dispX, dispY, dispW, dispH);
 
-    const scale = lerp(0.25, 1, Number(cropSizeSlider.value) / 100);
-    const cw = cropMaxRect.cropW * scale;
-    const ch = cropMaxRect.cropH * scale;
-    const availX = Math.max(0.001, cropMaxRect.cropW - cw);
-    const availY = Math.max(0.001, cropMaxRect.cropH - ch);
-    const cxImg = cropMaxRect.cropX + availX * cropCenter.cx;
-    const cyImg = cropMaxRect.cropY + availY * cropCenter.cy;
-
-    activeCropRectImg = { x: cxImg, y: cyImg, w: cw, h: ch };
-
-    const rx = dispX + cxImg * containScale;
-    const ry = dispY + cyImg * containScale;
-    const rw = cw * containScale;
-    const rh = ch * containScale;
-
-    cropGeom = { containScale, availX, availY };
+    const tl = imgToCanvasPos(cropRect.x, cropRect.y);
+    const br = imgToCanvasPos(cropRect.x + cropRect.w, cropRect.y + cropRect.h);
+    const rx = tl.x, ry = tl.y, rw = br.x - tl.x, rh = br.y - tl.y;
 
     ctx.fillStyle = 'rgba(0,0,0,0.65)';
     ctx.fillRect(0, 0, canvas.width, ry);
@@ -525,15 +526,81 @@
     ctx.lineWidth = 3;
     ctx.strokeRect(rx, ry, rw, rh);
 
-    const m = 16;
-    ctx.lineWidth = 4;
-    [[rx, ry, 1, 1], [rx + rw, ry, -1, 1], [rx, ry + rh, 1, -1], [rx + rw, ry + rh, -1, -1]].forEach(([px, py, sx, sy]) => {
+    const handleR = Math.max(9, canvas.width * 0.008);
+    cropHandles = {
+      tl: { x: rx, y: ry }, tr: { x: rx + rw, y: ry },
+      bl: { x: rx, y: ry + rh }, br: { x: rx + rw, y: ry + rh }
+    };
+    Object.values(cropHandles).forEach((h) => {
       ctx.beginPath();
-      ctx.moveTo(px, py + m * sy);
-      ctx.lineTo(px, py);
-      ctx.lineTo(px + m * sx, py);
+      ctx.arc(h.x, h.y, handleR, 0, Math.PI * 2);
+      ctx.fillStyle = '#D14B2A';
+      ctx.fill();
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#0A0807';
       ctx.stroke();
     });
+  }
+
+  function hitTestHandle(pos) {
+    const threshold = Math.max(28, canvas.width * 0.035);
+    for (const key of ['tl', 'tr', 'bl', 'br']) {
+      const h = cropHandles[key];
+      if (Math.hypot(pos.x - h.x, pos.y - h.y) <= threshold) return key;
+    }
+    return null;
+  }
+
+  function pointInRect(pos) {
+    const tl = imgToCanvasPos(cropRect.x, cropRect.y);
+    const br = imgToCanvasPos(cropRect.x + cropRect.w, cropRect.y + cropRect.h);
+    return pos.x >= tl.x && pos.x <= br.x && pos.y >= tl.y && pos.y <= br.y;
+  }
+
+  function resizeFromCorner(corner, posImg) {
+    const aspect = canvas.width / canvas.height;
+    const imgW = originalImg.naturalWidth, imgH = originalImg.naturalHeight;
+    const minSize = Math.min(imgW, imgH) * 0.12;
+    const r = cropDragOrigRect;
+    let x = r.x, y = r.y, w = r.w, h = r.h;
+
+    if (corner === 'br') {
+      let newW = clamp(posImg.x - r.x, minSize, imgW - r.x);
+      let newH = newW / aspect;
+      if (r.y + newH > imgH) { newH = imgH - r.y; newW = newH * aspect; }
+      w = newW; h = newH; x = r.x; y = r.y;
+    } else if (corner === 'tl') {
+      const anchorX = r.x + r.w, anchorY = r.y + r.h;
+      let newW = clamp(anchorX - posImg.x, minSize, anchorX);
+      let newH = newW / aspect;
+      if (anchorY - newH < 0) { newH = anchorY; newW = newH * aspect; }
+      w = newW; h = newH; x = anchorX - newW; y = anchorY - newH;
+    } else if (corner === 'tr') {
+      const anchorY = r.y + r.h;
+      let newW = clamp(posImg.x - r.x, minSize, imgW - r.x);
+      let newH = newW / aspect;
+      if (anchorY - newH < 0) { newH = anchorY; newW = newH * aspect; }
+      w = newW; h = newH; x = r.x; y = anchorY - newH;
+    } else if (corner === 'bl') {
+      const anchorX = r.x + r.w;
+      let newW = clamp(anchorX - posImg.x, minSize, anchorX);
+      let newH = newW / aspect;
+      if (r.y + newH > imgH) { newH = imgH - r.y; newW = newH * aspect; }
+      w = newW; h = newH; x = anchorX - newW; y = r.y;
+    }
+    cropRect = { x, y, w, h };
+  }
+
+  function moveRect(posImg) {
+    const imgW = originalImg.naturalWidth, imgH = originalImg.naturalHeight;
+    const dx = posImg.x - cropDragStartImg.x;
+    const dy = posImg.y - cropDragStartImg.y;
+    const r = cropDragOrigRect;
+    cropRect = {
+      x: clamp(r.x + dx, 0, imgW - r.w),
+      y: clamp(r.y + dy, 0, imgH - r.h),
+      w: r.w, h: r.h
+    };
   }
 
   function enterCropMode() {
@@ -541,9 +608,8 @@
     wasPlayingBeforeCrop = isPlaying;
     if (isPlaying) pause();
     cropMode = true;
-    cropCenter = { cx: 0.5, cy: 0.5 };
-    cropSizeSlider.value = 100;
-    cropMaxRect = computeCover(originalImg.naturalWidth, originalImg.naturalHeight, canvas.width, canvas.height);
+    const maxRect = computeCover(originalImg.naturalWidth, originalImg.naturalHeight, canvas.width, canvas.height);
+    cropRect = { x: maxRect.cropX, y: maxRect.cropY, w: maxRect.cropW, h: maxRect.cropH };
     cropControls.classList.remove('hidden');
     [playPauseBtn, resetBtn, newPhotoBtn, recordBtn, cropStartBtn, filmEffectBtn, aspectSelect, intensitySlider, speedSlider].forEach(el => el.disabled = true);
     drawCropOverlay();
@@ -551,6 +617,7 @@
 
   function exitCropMode() {
     cropMode = false;
+    cropDragMode = null;
     cropControls.classList.add('hidden');
     [playPauseBtn, resetBtn, newPhotoBtn, cropStartBtn, filmEffectBtn, aspectSelect, intensitySlider, speedSlider].forEach(el => el.disabled = false);
     recordBtn.disabled = !supportsRecording();
@@ -725,8 +792,6 @@
 
   cropStartBtn.addEventListener('click', enterCropMode);
 
-  cropSizeSlider.addEventListener('input', () => { if (cropMode) drawCropOverlay(); });
-
   cropCancelBtn.addEventListener('click', () => {
     exitCropMode();
     drawView(current);
@@ -734,8 +799,8 @@
   });
 
   cropApplyBtn.addEventListener('click', () => {
-    if (!activeCropRectImg) return;
-    const r = activeCropRectImg;
+    if (!cropRect) return;
+    const r = cropRect;
     const off = document.createElement('canvas');
     off.width = Math.max(1, Math.round(r.w));
     off.height = Math.max(1, Math.round(r.h));
@@ -759,22 +824,28 @@
 
   canvas.addEventListener('pointerdown', (e) => {
     if (!cropMode) return;
-    cropDragging = true;
-    cropDragStart = getCanvasPos(e);
-    cropDragOrigin = { cx: cropCenter.cx, cy: cropCenter.cy };
+    const pos = getCanvasPos(e);
+    const handle = hitTestHandle(pos);
+    if (handle) {
+      cropDragMode = handle;
+    } else if (pointInRect(pos)) {
+      cropDragMode = 'move';
+    } else {
+      return;
+    }
+    cropDragStartImg = canvasToImgPos(pos);
+    cropDragOrigRect = { ...cropRect };
     canvas.setPointerCapture(e.pointerId);
   });
   canvas.addEventListener('pointermove', (e) => {
-    if (!cropMode || !cropDragging || !cropGeom) return;
-    const pos = getCanvasPos(e);
-    const dxImg = (pos.x - cropDragStart.x) / cropGeom.containScale;
-    const dyImg = (pos.y - cropDragStart.y) / cropGeom.containScale;
-    cropCenter.cx = clamp(cropDragOrigin.cx + dxImg / cropGeom.availX, 0, 1);
-    cropCenter.cy = clamp(cropDragOrigin.cy + dyImg / cropGeom.availY, 0, 1);
+    if (!cropMode || !cropDragMode || !cropGeom) return;
+    const posImg = canvasToImgPos(getCanvasPos(e));
+    if (cropDragMode === 'move') moveRect(posImg);
+    else resizeFromCorner(cropDragMode, posImg);
     drawCropOverlay();
   });
-  canvas.addEventListener('pointerup', () => { cropDragging = false; });
-  canvas.addEventListener('pointerleave', () => { cropDragging = false; });
+  canvas.addEventListener('pointerup', () => { cropDragMode = null; });
+  canvas.addEventListener('pointerleave', () => { cropDragMode = null; });
 
   resetBtn.addEventListener('click', () => {
     if (!img) return;
