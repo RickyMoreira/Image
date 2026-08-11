@@ -72,6 +72,7 @@
 
   .sprockets {
     height: 12px;
+    margin: 0 auto;
     background-color: var(--accent);
     background-image: radial-gradient(circle, var(--bg) 2.6px, transparent 3px);
     background-size: 22px 12px;
@@ -424,7 +425,7 @@
     </div>
 
     <div class="frame-col">
-      <div class="sprockets top"></div>
+      <div class="sprockets top" id="sprocketTop"></div>
       <div class="canvas-shell">
         <div class="canvas-stage">
           <canvas id="canvas" width="1920" height="1080"></canvas>
@@ -435,7 +436,7 @@
           </div>
         </div>
       </div>
-      <div class="sprockets bottom"></div>
+      <div class="sprockets bottom" id="sprocketBottom"></div>
     </div>
   </div>
 
@@ -446,6 +447,8 @@
 (function () {
   const canvas = document.getElementById('canvas');
   const ctx = canvas.getContext('2d');
+  const sprocketTop = document.getElementById('sprocketTop');
+  const sprocketBottom = document.getElementById('sprocketBottom');
   const dropzone = document.getElementById('dropzone');
   const fileInput = document.getElementById('fileInput');
   const hud = document.getElementById('hud');
@@ -1160,6 +1163,15 @@
     transitionType = transitionSelect.value;
   });
 
+  function syncSprocketWidth() {
+    const w = canvas.getBoundingClientRect().width;
+    if (w) {
+      sprocketTop.style.width = w + 'px';
+      sprocketBottom.style.width = w + 'px';
+    }
+  }
+  window.addEventListener('resize', syncSprocketWidth);
+
   function applyAspect() {
     const [w, h] = aspectSelect.value.split(',').map(Number);
     canvas.width = w;
@@ -1170,6 +1182,7 @@
       resetSequence();
       renderStaticFrame();
     }
+    requestAnimationFrame(syncSprocketWidth);
   }
 
   aspectSelect.addEventListener('change', () => {
@@ -1459,6 +1472,7 @@
   buildGrainTiles();
   buildScanlinePattern();
   updateControlsAvailability();
+  requestAnimationFrame(syncSprocketWidth);
 })();
 </script>
 </body>
