@@ -856,12 +856,13 @@
   function reorderPhoto(from, to) {
     const wasPlaying = isPlaying;
     if (isPlaying) pause();
+    const adjustedTo = from < to ? to - 1 : to;
     const [moved] = photos.splice(from, 1);
-    photos.splice(to, 0, moved);
-    selectedIndex = to;
+    photos.splice(adjustedTo, 0, moved);
+    selectedIndex = adjustedTo;
     resetSequence();
-    currentIndex = to;
-    nextIndex = to;
+    currentIndex = adjustedTo;
+    nextIndex = adjustedTo;
     renderThumbs();
     updateControlsAvailability();
     renderStaticFrame();
