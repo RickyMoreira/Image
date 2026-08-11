@@ -432,17 +432,17 @@
     ctx.drawImage(tile, 0, 0, w, h);
     ctx.globalAlpha = 1;
 
-    if (Math.random() < 0.35) {
-      const scratches = 1 + Math.floor(Math.random() * 2);
+    if (Math.random() < 0.7) {
+      const scratches = 1 + Math.floor(Math.random() * 3);
       for (let i = 0; i < scratches; i++) {
         const x = Math.random() * w;
-        const segH = h * (0.3 + Math.random() * 0.7);
+        const segH = h * (0.4 + Math.random() * 0.6);
         const y = Math.random() * (h - segH);
-        ctx.strokeStyle = 'rgba(255,255,255,' + (0.15 + Math.random() * 0.25) + ')';
-        ctx.lineWidth = 1 + Math.random();
+        ctx.strokeStyle = 'rgba(255,255,255,' + (0.35 + Math.random() * 0.4) + ')';
+        ctx.lineWidth = 2 + Math.random() * 2;
         ctx.beginPath();
         ctx.moveTo(x, y);
-        ctx.lineTo(x + (Math.random() - 0.5) * 4, y + segH);
+        ctx.lineTo(x + (Math.random() - 0.5) * 6, y + segH);
         ctx.stroke();
       }
     }
@@ -663,14 +663,10 @@
     const y = cover.cropY + (cover.cropH - h) * view.cy;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.save();
-    let jx = 0, jy = 0;
     if (oldFilmEnabled) {
       ctx.filter = 'sepia(0.35) contrast(1.08) saturate(0.75) brightness(0.97)';
-      const bucket = Math.floor(performance.now() / 70);
-      jx = (pseudoRandom(bucket) - 0.5) * 6;
-      jy = (pseudoRandom(bucket + 99) - 0.5) * 6;
     }
-    ctx.drawImage(img, x, y, w, h, jx, jy, canvas.width, canvas.height);
+    ctx.drawImage(img, x, y, w, h, 0, 0, canvas.width, canvas.height);
     ctx.restore();
     if (oldFilmEnabled) renderFilmEffect();
     hud.textContent = view.zoom.toFixed(2) + '×';
