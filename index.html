@@ -830,6 +830,7 @@
     cropDragStartImg = canvasToImgPos(pos);
     cropDragOrigRect = { ...cropRect };
     canvas.setPointerCapture(e.pointerId);
+    e.preventDefault();
   });
   canvas.addEventListener('pointermove', (e) => {
     if (!cropMode || !cropDragMode || !cropGeom) return;
@@ -837,9 +838,16 @@
     if (cropDragMode === 'move') moveRect(posImg);
     else resizeFromCorner(cropDragMode, posImg);
     drawCropOverlay();
+    e.preventDefault();
   });
-  canvas.addEventListener('pointerup', () => { cropDragMode = null; });
-  canvas.addEventListener('pointerleave', () => { cropDragMode = null; });
+  function endCropDrag(e) {
+    if (cropDragMode && e && canvas.hasPointerCapture(e.pointerId)) {
+      canvas.releasePointerCapture(e.pointerId);
+    }
+    cropDragMode = null;
+  }
+  canvas.addEventListener('pointerup', endCropDrag);
+  canvas.addEventListener('pointercancel', endCropDrag);
 
   resetBtn.addEventListener('click', () => {
     if (!img) return;
