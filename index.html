@@ -740,11 +740,16 @@
 
   function renderVignetteEffect() {
     const w = canvas.width, h = canvas.height;
-    const grad = ctx.createRadialGradient(w / 2, h / 2, h * 0.5, w / 2, h / 2, h * 0.95);
+    const r = h / 2;
+    ctx.save();
+    ctx.translate(w / 2, h / 2);
+    ctx.scale(w / h, 1);
+    const grad = ctx.createRadialGradient(0, 0, r * 0.55, 0, 0, r * 1.05);
     grad.addColorStop(0, 'rgba(0,0,0,0)');
-    grad.addColorStop(1, 'rgba(0,0,0,0.35)');
+    grad.addColorStop(1, 'rgba(0,0,0,0.4)');
     ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, w, h);
+    ctx.fillRect(-r * 2, -r * 2, r * 4, r * 4);
+    ctx.restore();
   }
 
   function renderVhsTrackingEffect() {
