@@ -86,12 +86,20 @@
     background: #0A0807;
     border-left: 1px solid var(--line);
     border-right: 1px solid var(--line);
+    display: flex;
+    justify-content: center;
+  }
+
+  .canvas-stage {
+    position: relative;
   }
 
   canvas {
     display: block;
-    width: 100%;
+    width: auto;
     height: auto;
+    max-width: 100%;
+    max-height: 70vh;
     touch-action: none;
   }
 
@@ -419,11 +427,13 @@
     <div class="frame-col">
       <div class="sprockets top"></div>
       <div class="canvas-shell">
-        <canvas id="canvas" width="1920" height="1080"></canvas>
-        <div class="hud" id="hud">1.00×</div>
-        <div class="dropzone" id="dropzone">
-          <div class="icon">＋</div>
-          <div>Solte uma ou mais fotos aqui<br>ou clique para escolher</div>
+        <div class="canvas-stage">
+          <canvas id="canvas" width="1920" height="1080"></canvas>
+          <div class="hud" id="hud">1.00×</div>
+          <div class="dropzone" id="dropzone">
+            <div class="icon">＋</div>
+            <div>Solte uma ou mais fotos aqui<br>ou clique para escolher</div>
+          </div>
         </div>
       </div>
       <div class="sprockets bottom"></div>
