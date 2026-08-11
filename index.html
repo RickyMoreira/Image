@@ -92,6 +92,7 @@
     display: block;
     width: 100%;
     height: auto;
+    touch-action: none;
   }
 
   .dropzone {
@@ -112,6 +113,13 @@
   .dropzone:hover { background: rgba(209, 75, 42, 0.06); }
   .dropzone.hidden { display: none; }
   .hidden { display: none !important; }
+  .dropzone .icon {
+    width: 40px; height: 40px;
+    border: 1.5px solid var(--muted);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+  }
 
   .crop-controls {
     display: flex;
@@ -127,15 +135,6 @@
     font-size: 11px;
     color: var(--muted);
     line-height: 1.5;
-  }
-
-  canvas { touch-action: none; }
-  .dropzone .icon {
-    width: 40px; height: 40px;
-    border: 1.5px solid var(--muted);
-    border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 18px;
   }
 
   .hud {
@@ -257,6 +256,60 @@
 
   input[type="file"] { display: none; }
 
+  .thumb-row {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+  .thumb {
+    position: relative;
+    flex: 0 0 auto;
+    width: 56px;
+    height: 56px;
+    border-radius: 3px;
+    overflow: hidden;
+    border: 2px solid transparent;
+    cursor: pointer;
+    background: var(--panel-2);
+  }
+  .thumb.selected { border-color: var(--accent); }
+  .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .thumb-remove {
+    position: absolute;
+    top: 2px; right: 2px;
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    background: rgba(10,8,7,0.75);
+    color: var(--text);
+    border: none;
+    font-size: 11px;
+    line-height: 16px;
+    padding: 0;
+    cursor: pointer;
+  }
+  .thumb-add {
+    flex: 0 0 auto;
+    width: 56px;
+    height: 56px;
+    border-radius: 3px;
+    border: 1.5px dashed var(--line);
+    background: transparent;
+    color: var(--muted);
+    font-size: 20px;
+    cursor: pointer;
+  }
+  .thumb-add:hover { border-color: var(--accent); color: var(--accent); }
+  .thumb-order {
+    position: absolute;
+    bottom: 2px; left: 2px;
+    font-size: 9px;
+    color: var(--text);
+    background: rgba(10,8,7,0.75);
+    padding: 0 4px;
+    border-radius: 2px;
+  }
+
   .status {
     font-size: 11px;
     color: var(--muted);
@@ -278,7 +331,7 @@
   <header>
     <p class="eyebrow">Câmera lenta / 01</p>
     <h1>Movimento</h1>
-    <p class="sub">Transforma uma foto parada em panorâmica com zoom contínuo — o mesmo efeito usado em documentários e slideshows. Ajuste intensidade e velocidade e baixe o vídeo.</p>
+    <p class="sub">Transforma fotos paradas em uma sequência com panorâmica, zoom contínuo e transições — o mesmo efeito usado em documentários e slideshows.</p>
   </header>
 
   <div class="stage">
@@ -289,14 +342,19 @@
         <div class="hud" id="hud">1.00×</div>
         <div class="dropzone" id="dropzone">
           <div class="icon">＋</div>
-          <div>Solte uma foto aqui<br>ou clique para escolher</div>
+          <div>Solte uma ou mais fotos aqui<br>ou clique para escolher</div>
         </div>
       </div>
       <div class="sprockets bottom"></div>
     </div>
 
     <div class="panel">
-      <input type="file" id="fileInput" accept="image/*">
+      <input type="file" id="fileInput" accept="image/*" multiple>
+
+      <div class="field">
+        <label>Fotos</label>
+        <div class="thumb-row" id="thumbRow"></div>
+      </div>
 
       <div class="field">
         <label>Formato</label>
@@ -321,8 +379,8 @@
       </div>
 
       <div class="field">
-        <label>Enquadramento</label>
-        <button class="btn" id="cropStart" type="button" disabled>Cortar foto</button>
+        <label>Enquadramento <span class="val" id="cropTargetVal"></span></label>
+        <button class="btn" id="cropStart" type="button" disabled>Cortar foto selecionada</button>
       </div>
 
       <div class="crop-controls hidden" id="cropControls">
@@ -341,15 +399,15 @@
         </div>
       </div>
 
-      <div class="row" id="playbackRow">
+      <div class="row">
         <button class="btn" id="playPause" disabled>Pausar</button>
         <button class="btn" id="reset" disabled>Reiniciar</button>
       </div>
-      <button class="btn" id="newPhoto" disabled>Nova foto</button>
+      <button class="btn" id="clearAll" disabled>Limpar tudo</button>
 
       <button class="btn primary" id="record" disabled>Baixar vídeo (.webm)</button>
 
-      <div class="status" id="status">Escolha uma foto para começar.</div>
+      <div class="status" id="status">Escolha uma ou mais fotos para começar.</div>
     </div>
   </div>
 
@@ -363,6 +421,7 @@
   const dropzone = document.getElementById('dropzone');
   const fileInput = document.getElementById('fileInput');
   const hud = document.getElementById('hud');
+  const thumbRow = document.getElementById('thumbRow');
   const intensitySlider = document.getElementById('intensity');
   const speedSlider = document.getElementById('speed');
   const aspectSelect = document.getElementById('aspect');
@@ -370,7 +429,7 @@
   const speedVal = document.getElementById('speedVal');
   const playPauseBtn = document.getElementById('playPause');
   const resetBtn = document.getElementById('reset');
-  const newPhotoBtn = document.getElementById('newPhoto');
+  const clearAllBtn = document.getElementById('clearAll');
   const recordBtn = document.getElementById('record');
   const filmEffectBtn = document.getElementById('filmEffect');
   const tvEffectBtn = document.getElementById('tvEffect');
@@ -379,34 +438,36 @@
   const cropControls = document.getElementById('cropControls');
   const cropCancelBtn = document.getElementById('cropCancel');
   const cropApplyBtn = document.getElementById('cropApply');
+  const cropTargetVal = document.getElementById('cropTargetVal');
+
+  const TRANSITION_MS = 700;
 
   let oldFilmEnabled = false;
   let oldTvEnabled = false;
   let grainTiles = [];
   let scanlinePattern = null;
 
-  let originalImg = null;
-  let cropMode = false, wasPlayingBeforeCrop = false;
-  let cropRect = null;    // {x,y,w,h} in original-image pixel space
-  let cropGeom = null;    // display-space geometry, recomputed each crop render
-  let cropHandles = null; // canvas-space corner points, recomputed each render
-  let cropDragMode = null; // null | 'move' | 'tl' | 'tr' | 'bl' | 'br'
-  let cropDragStartImg = null;  // pointer position in image space at drag start
-  let cropDragOrigRect = null;  // rect snapshot at drag start
+  let photos = [];           // { original, working, cover, current, target }
+  let selectedIndex = 0;     // which photo is targeted by crop / highlighted in thumbs
+  let currentIndex = 0;      // which photo is showing in the sequence
+  let nextIndex = 0;         // which photo is being transitioned into
+  let sequencePhase = 'photo'; // 'photo' | 'transition'
 
-  let img = null;
-  let cover = null; // {cropX, cropY, cropW, cropH}
-  let current = null, target = null;
-  let startTime = null, pausedElapsed = 0, rafId = null;
+  let cropMode = false, wasPlayingBeforeCrop = false;
+  let cropRect = null;
+  let cropGeom = null;
+  let cropHandles = null;
+  let cropDragMode = null;
+  let cropDragStartImg = null;
+  let cropDragOrigRect = null;
+
+  let phaseStart = null, pausedElapsed = 0, rafId = null;
   let isPlaying = false;
   let duration = 8000; // ms, driven by speed slider
 
   function lerp(a, b, t) { return a + (b - a) * t; }
   function easeInOutSine(t) { return -(Math.cos(Math.PI * t) - 1) / 2; }
-  function pseudoRandom(seed) {
-    const x = Math.sin(seed * 12.9898) * 43758.5453;
-    return x - Math.floor(x);
-  }
+  function clamp(v, min, max) { return Math.min(max, Math.max(min, v)); }
 
   function buildScanlinePattern() {
     const c = document.createElement('canvas');
@@ -418,32 +479,6 @@
     scanlinePattern = ctx.createPattern(c, 'repeat');
   }
 
-  function renderTVEffect() {
-    const w = canvas.width, h = canvas.height;
-
-    ctx.fillStyle = scanlinePattern;
-    ctx.fillRect(0, 0, w, h);
-
-    const grad = ctx.createRadialGradient(w / 2, h / 2, h * 0.35, w / 2, h / 2, h * 0.75);
-    grad.addColorStop(0, 'rgba(0,0,0,0)');
-    grad.addColorStop(1, 'rgba(0,0,0,0.4)');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, w, h);
-
-    if (Math.random() < 0.08) {
-      const bandH = h * (0.015 + Math.random() * 0.03);
-      const bandY = Math.random() * (h - bandH);
-      ctx.fillStyle = 'rgba(255,255,255,0.22)';
-      ctx.fillRect(0, bandY, w, bandH);
-    }
-
-    if (Math.random() < 0.04) {
-      ctx.globalAlpha = 0.18;
-      const tile = grainTiles[Math.floor(Math.random() * grainTiles.length)];
-      ctx.drawImage(tile, 0, 0, w, h);
-      ctx.globalAlpha = 1;
-    }
-  }
   function buildGrainTiles() {
     grainTiles = [];
     const w = 320, h = 180;
@@ -497,6 +532,33 @@
     }
   }
 
+  function renderTVEffect() {
+    const w = canvas.width, h = canvas.height;
+
+    ctx.fillStyle = scanlinePattern;
+    ctx.fillRect(0, 0, w, h);
+
+    const grad = ctx.createRadialGradient(w / 2, h / 2, h * 0.35, w / 2, h / 2, h * 0.75);
+    grad.addColorStop(0, 'rgba(0,0,0,0)');
+    grad.addColorStop(1, 'rgba(0,0,0,0.4)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+
+    if (Math.random() < 0.08) {
+      const bandH = h * (0.015 + Math.random() * 0.03);
+      const bandY = Math.random() * (h - bandH);
+      ctx.fillStyle = 'rgba(255,255,255,0.22)';
+      ctx.fillRect(0, bandY, w, bandH);
+    }
+
+    if (Math.random() < 0.04) {
+      ctx.globalAlpha = 0.18;
+      const tile = grainTiles[Math.floor(Math.random() * grainTiles.length)];
+      ctx.drawImage(tile, 0, 0, w, h);
+      ctx.globalAlpha = 1;
+    }
+  }
+
   function computeCover(imgW, imgH, cw, ch) {
     const imgRatio = imgW / imgH;
     const canvasRatio = cw / ch;
@@ -515,7 +577,336 @@
     };
   }
 
-  function clamp(v, min, max) { return Math.min(max, Math.max(min, v)); }
+  function zoomBounds() {
+    const intensity = Number(intensitySlider.value);
+    const minZ = 1 + (intensity / 100) * 0.08;
+    const maxZ = 1 + (intensity / 100) * 0.55;
+    return [Math.max(1.01, minZ), Math.max(1.06, maxZ)];
+  }
+
+  function randomView(prev) {
+    const [minZ, maxZ] = zoomBounds();
+    let zoom, cx, cy;
+    do {
+      zoom = minZ + Math.random() * (maxZ - minZ);
+      cx = Math.random();
+      cy = Math.random();
+    } while (prev && Math.abs(zoom - prev.zoom) < 0.03 && Math.hypot(cx - prev.cx, cy - prev.cy) < 0.2);
+    return { zoom, cx, cy };
+  }
+
+  function updateDuration() {
+    const speed = Number(speedSlider.value);
+    duration = lerp(16000, 3500, speed / 100);
+  }
+
+  function computeCoverForPhoto(photo) {
+    photo.cover = computeCover(photo.working.naturalWidth, photo.working.naturalHeight, canvas.width, canvas.height);
+  }
+
+  function resetPhotoView(photo) {
+    photo.current = { zoom: 1, cx: 0.5, cy: 0.5 };
+    photo.target = randomView(photo.current);
+  }
+
+  function resetSequence() {
+    currentIndex = 0;
+    nextIndex = 0;
+    sequencePhase = 'photo';
+    pausedElapsed = 0;
+    phaseStart = null;
+    photos.forEach(resetPhotoView);
+  }
+
+  function renderPhotoFrame(photo, view) {
+    const cover = photo.cover;
+    const w = cover.cropW / view.zoom;
+    const h = cover.cropH / view.zoom;
+    const x = cover.cropX + (cover.cropW - w) * view.cx;
+    const y = cover.cropY + (cover.cropH - h) * view.cy;
+    ctx.save();
+    const filters = [];
+    if (oldFilmEnabled) filters.push('sepia(0.35)', 'contrast(1.08)', 'saturate(0.75)', 'brightness(0.97)');
+    if (oldTvEnabled) filters.push('contrast(1.12)', 'saturate(0.8)', 'brightness(1.03)');
+    if (filters.length) ctx.filter = filters.join(' ');
+    ctx.drawImage(photo.working, x, y, w, h, 0, 0, canvas.width, canvas.height);
+    ctx.restore();
+    if (oldTvEnabled) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighten';
+      ctx.globalAlpha = 0.1;
+      ctx.drawImage(photo.working, x, y, w, h, -3, 0, canvas.width, canvas.height);
+      ctx.restore();
+    }
+  }
+
+  function renderStaticFrame() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (!photos.length) return;
+    const p = photos[currentIndex];
+    renderPhotoFrame(p, p.current);
+    if (oldFilmEnabled) renderFilmEffect();
+    if (oldTvEnabled) renderTVEffect();
+    hud.textContent = p.current.zoom.toFixed(2) + '×';
+  }
+
+  function tick(now) {
+    if (phaseStart === null) phaseStart = now - pausedElapsed;
+    const elapsed = now - phaseStart;
+    const activeDuration = sequencePhase === 'transition' ? TRANSITION_MS : duration;
+    const t = Math.min(elapsed / activeDuration, 1);
+    const e = easeInOutSine(t);
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    let hudZoom;
+
+    if (sequencePhase === 'photo') {
+      const p = photos[currentIndex];
+      const view = {
+        zoom: lerp(p.current.zoom, p.target.zoom, e),
+        cx: lerp(p.current.cx, p.target.cx, e),
+        cy: lerp(p.current.cy, p.target.cy, e)
+      };
+      renderPhotoFrame(p, view);
+      hudZoom = view.zoom;
+    } else {
+      const pA = photos[currentIndex];
+      const pB = photos[nextIndex];
+      renderPhotoFrame(pA, pA.target);
+      ctx.save();
+      ctx.globalAlpha = e;
+      renderPhotoFrame(pB, pB.current);
+      ctx.restore();
+      hudZoom = pB.current.zoom;
+    }
+
+    if (oldFilmEnabled) renderFilmEffect();
+    if (oldTvEnabled) renderTVEffect();
+    hud.textContent = hudZoom.toFixed(2) + '×';
+
+    if (t >= 1) {
+      if (sequencePhase === 'photo') {
+        const p = photos[currentIndex];
+        p.current = p.target;
+        if (photos.length > 1) {
+          nextIndex = (currentIndex + 1) % photos.length;
+          resetPhotoView(photos[nextIndex]);
+          sequencePhase = 'transition';
+        } else {
+          p.target = randomView(p.current);
+        }
+      } else {
+        currentIndex = nextIndex;
+        sequencePhase = 'photo';
+      }
+      phaseStart = now;
+      pausedElapsed = 0;
+    }
+
+    if (isPlaying) rafId = requestAnimationFrame(tick);
+  }
+
+  function play() {
+    if (!photos.length || isPlaying) return;
+    isPlaying = true;
+    playPauseBtn.textContent = 'Pausar';
+    phaseStart = null;
+    rafId = requestAnimationFrame(tick);
+  }
+
+  function pause() {
+    if (!isPlaying) return;
+    isPlaying = false;
+    playPauseBtn.textContent = 'Reproduzir';
+    cancelAnimationFrame(rafId);
+    if (phaseStart !== null) pausedElapsed = performance.now() - phaseStart;
+  }
+
+  function updateControlsAvailability() {
+    const has = photos.length > 0;
+    playPauseBtn.disabled = !has;
+    resetBtn.disabled = !has;
+    clearAllBtn.disabled = !has;
+    cropStartBtn.disabled = !has;
+    recordBtn.disabled = !has || !supportsRecording();
+    cropTargetVal.textContent = has ? '#' + (selectedIndex + 1) : '';
+  }
+
+  function renderThumbs() {
+    thumbRow.innerHTML = '';
+    photos.forEach((p, i) => {
+      const wrap = document.createElement('div');
+      wrap.className = 'thumb' + (i === selectedIndex ? ' selected' : '');
+      const im = document.createElement('img');
+      im.src = p.original.src;
+      wrap.appendChild(im);
+      const order = document.createElement('span');
+      order.className = 'thumb-order';
+      order.textContent = String(i + 1);
+      wrap.appendChild(order);
+      const rm = document.createElement('button');
+      rm.className = 'thumb-remove';
+      rm.type = 'button';
+      rm.textContent = '×';
+      rm.setAttribute('aria-label', 'Remover foto');
+      rm.addEventListener('click', (ev) => { ev.stopPropagation(); removePhoto(i); });
+      wrap.appendChild(rm);
+      wrap.addEventListener('click', () => {
+        selectedIndex = i;
+        renderThumbs();
+        updateControlsAvailability();
+      });
+      thumbRow.appendChild(wrap);
+    });
+    const addBtn = document.createElement('button');
+    addBtn.className = 'thumb-add';
+    addBtn.type = 'button';
+    addBtn.textContent = '+';
+    addBtn.setAttribute('aria-label', 'Adicionar fotos');
+    addBtn.addEventListener('click', () => fileInput.click());
+    thumbRow.appendChild(addBtn);
+  }
+
+  function onPhotosChanged(isFirstBatch) {
+    renderThumbs();
+    updateControlsAvailability();
+    if (isFirstBatch) {
+      dropzone.classList.add('hidden');
+      hud.classList.add('visible');
+      resetSequence();
+      statusEl.textContent = supportsRecording()
+        ? 'Pronto. Ajuste os controles ou baixe o vídeo.'
+        : 'Pronto para pré-visualizar. Gravação não é suportada neste navegador.';
+      statusEl.classList.remove('active');
+      play();
+    }
+  }
+
+  function addPhotoFromFile(file, isFirstOfBatch) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const image = new Image();
+      image.onload = () => {
+        const wasEmpty = photos.length === 0;
+        const photo = { original: image, working: image };
+        computeCoverForPhoto(photo);
+        resetPhotoView(photo);
+        photos.push(photo);
+        selectedIndex = photos.length - 1;
+        onPhotosChanged(wasEmpty);
+        if (!wasEmpty) { renderThumbs(); updateControlsAvailability(); }
+      };
+      image.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function addPhotosFromFiles(fileList) {
+    Array.from(fileList).filter(f => f.type.startsWith('image/')).forEach((f) => addPhotoFromFile(f));
+  }
+
+  function removePhoto(index) {
+    const wasPlaying = isPlaying;
+    if (isPlaying) pause();
+    photos.splice(index, 1);
+    if (!photos.length) {
+      dropzone.classList.remove('hidden');
+      hud.classList.remove('visible');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      statusEl.textContent = 'Escolha uma ou mais fotos para começar.';
+      statusEl.classList.remove('active');
+      fileInput.value = '';
+      selectedIndex = 0;
+      renderThumbs();
+      updateControlsAvailability();
+      return;
+    }
+    selectedIndex = clamp(selectedIndex, 0, photos.length - 1);
+    resetSequence();
+    renderThumbs();
+    updateControlsAvailability();
+    renderStaticFrame();
+    if (wasPlaying) play();
+  }
+
+  dropzone.addEventListener('click', () => fileInput.click());
+  dropzone.addEventListener('dragover', (e) => { e.preventDefault(); });
+  dropzone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    if (e.dataTransfer.files.length) addPhotosFromFiles(e.dataTransfer.files);
+  });
+  fileInput.addEventListener('change', (e) => {
+    if (e.target.files.length) addPhotosFromFiles(e.target.files);
+    fileInput.value = '';
+  });
+
+  clearAllBtn.addEventListener('click', () => {
+    pause();
+    photos = [];
+    selectedIndex = 0;
+    dropzone.classList.remove('hidden');
+    hud.classList.remove('visible');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    statusEl.textContent = 'Escolha uma ou mais fotos para começar.';
+    statusEl.classList.remove('active');
+    fileInput.value = '';
+    renderThumbs();
+    updateControlsAvailability();
+  });
+
+  playPauseBtn.addEventListener('click', () => { isPlaying ? pause() : play(); });
+
+  filmEffectBtn.addEventListener('click', () => {
+    oldFilmEnabled = !oldFilmEnabled;
+    filmEffectBtn.setAttribute('aria-pressed', String(oldFilmEnabled));
+    if (photos.length && !isPlaying) renderStaticFrame();
+  });
+
+  tvEffectBtn.addEventListener('click', () => {
+    oldTvEnabled = !oldTvEnabled;
+    tvEffectBtn.setAttribute('aria-pressed', String(oldTvEnabled));
+    if (photos.length && !isPlaying) renderStaticFrame();
+  });
+
+  resetBtn.addEventListener('click', () => {
+    if (!photos.length) return;
+    const wasPlaying = isPlaying;
+    if (isPlaying) pause();
+    resetSequence();
+    renderStaticFrame();
+    statusEl.textContent = 'Reiniciado.';
+    statusEl.classList.remove('active');
+    if (wasPlaying) play();
+  });
+
+  intensitySlider.addEventListener('input', () => {
+    intensityVal.textContent = intensitySlider.value + '%';
+  });
+  speedSlider.addEventListener('input', () => {
+    speedVal.textContent = speedSlider.value + '%';
+    updateDuration();
+  });
+
+  function applyAspect() {
+    const [w, h] = aspectSelect.value.split(',').map(Number);
+    canvas.width = w;
+    canvas.height = h;
+    canvas.style.aspectRatio = w + ' / ' + h;
+    if (photos.length) {
+      photos.forEach(computeCoverForPhoto);
+      resetSequence();
+      renderStaticFrame();
+    }
+  }
+
+  aspectSelect.addEventListener('change', () => {
+    const wasPlaying = isPlaying;
+    if (isPlaying) pause();
+    applyAspect();
+    if (wasPlaying) play();
+  });
+
+  // ---- crop mode (operates on photos[selectedIndex]) ----
 
   function getCanvasPos(evt) {
     const rect = canvas.getBoundingClientRect();
@@ -536,9 +927,10 @@
   }
 
   function drawCropOverlay() {
-    const containScale = Math.min(canvas.width / originalImg.naturalWidth, canvas.height / originalImg.naturalHeight);
-    const dispW = originalImg.naturalWidth * containScale;
-    const dispH = originalImg.naturalHeight * containScale;
+    const original = photos[selectedIndex].original;
+    const containScale = Math.min(canvas.width / original.naturalWidth, canvas.height / original.naturalHeight);
+    const dispW = original.naturalWidth * containScale;
+    const dispH = original.naturalHeight * containScale;
     const dispX = (canvas.width - dispW) / 2;
     const dispY = (canvas.height - dispH) / 2;
     cropGeom = { containScale, dispX, dispY };
@@ -546,7 +938,7 @@
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = '#0A0807';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(originalImg, dispX, dispY, dispW, dispH);
+    ctx.drawImage(original, dispX, dispY, dispW, dispH);
 
     const tl = imgToCanvasPos(cropRect.x, cropRect.y);
     const br = imgToCanvasPos(cropRect.x + cropRect.w, cropRect.y + cropRect.h);
@@ -594,7 +986,8 @@
   }
 
   function resizeFromCorner(corner, posImg) {
-    const imgW = originalImg.naturalWidth, imgH = originalImg.naturalHeight;
+    const original = photos[selectedIndex].original;
+    const imgW = original.naturalWidth, imgH = original.naturalHeight;
     const minSize = Math.min(imgW, imgH) * 0.05;
     const r = cropDragOrigRect;
     let x = r.x, y = r.y, w = r.w, h = r.h;
@@ -623,7 +1016,8 @@
   }
 
   function moveRect(posImg) {
-    const imgW = originalImg.naturalWidth, imgH = originalImg.naturalHeight;
+    const original = photos[selectedIndex].original;
+    const imgW = original.naturalWidth, imgH = original.naturalHeight;
     const dx = posImg.x - cropDragStartImg.x;
     const dy = posImg.y - cropDragStartImg.y;
     const r = cropDragOrigRect;
@@ -635,13 +1029,16 @@
   }
 
   function enterCropMode() {
-    if (!originalImg) return;
+    if (!photos.length) return;
     wasPlayingBeforeCrop = isPlaying;
     if (isPlaying) pause();
     cropMode = true;
-    cropRect = { x: 0, y: 0, w: originalImg.naturalWidth, h: originalImg.naturalHeight };
+    const original = photos[selectedIndex].original;
+    cropRect = { x: 0, y: 0, w: original.naturalWidth, h: original.naturalHeight };
     cropControls.classList.remove('hidden');
-    [playPauseBtn, resetBtn, newPhotoBtn, recordBtn, cropStartBtn, filmEffectBtn, aspectSelect, intensitySlider, speedSlider].forEach(el => el.disabled = true);
+    [playPauseBtn, resetBtn, clearAllBtn, recordBtn, cropStartBtn, filmEffectBtn, tvEffectBtn, aspectSelect, intensitySlider, speedSlider].forEach(el => el.disabled = true);
+    thumbRow.classList.add('hidden-interact');
+    thumbRow.style.pointerEvents = 'none';
     drawCropOverlay();
   }
 
@@ -649,213 +1046,35 @@
     cropMode = false;
     cropDragMode = null;
     cropControls.classList.add('hidden');
-    [playPauseBtn, resetBtn, newPhotoBtn, cropStartBtn, filmEffectBtn, aspectSelect, intensitySlider, speedSlider].forEach(el => el.disabled = false);
+    thumbRow.style.pointerEvents = '';
+    [playPauseBtn, resetBtn, clearAllBtn, cropStartBtn, filmEffectBtn, tvEffectBtn, aspectSelect, intensitySlider, speedSlider].forEach(el => el.disabled = false);
     recordBtn.disabled = !supportsRecording();
   }
-
-  function zoomBounds() {
-    const intensity = Number(intensitySlider.value);
-    const minZ = 1 + (intensity / 100) * 0.08;
-    const maxZ = 1 + (intensity / 100) * 0.55;
-    return [Math.max(1.01, minZ), Math.max(1.06, maxZ)];
-  }
-
-  function randomView(prev) {
-    const [minZ, maxZ] = zoomBounds();
-    let zoom, cx, cy;
-    do {
-      zoom = minZ + Math.random() * (maxZ - minZ);
-      cx = Math.random();
-      cy = Math.random();
-    } while (prev && Math.abs(zoom - prev.zoom) < 0.03 && Math.hypot(cx - prev.cx, cy - prev.cy) < 0.2);
-    return { zoom, cx, cy };
-  }
-
-  function updateDuration() {
-    const speed = Number(speedSlider.value);
-    duration = lerp(16000, 3500, speed / 100);
-  }
-
-  function applyAspect() {
-    const [w, h] = aspectSelect.value.split(',').map(Number);
-    canvas.width = w;
-    canvas.height = h;
-    canvas.style.aspectRatio = w + ' / ' + h;
-    if (img) {
-      cover = computeCover(img.naturalWidth, img.naturalHeight, canvas.width, canvas.height);
-      current = { zoom: 1, cx: 0.5, cy: 0.5 };
-      target = randomView(current);
-      pausedElapsed = 0;
-      startTime = null;
-      drawView(current);
-    }
-  }
-
-  aspectSelect.addEventListener('change', () => {
-    const wasPlaying = isPlaying;
-    if (isPlaying) pause();
-    applyAspect();
-    if (wasPlaying) play();
-  });
-
-  function drawView(view) {
-    const w = cover.cropW / view.zoom;
-    const h = cover.cropH / view.zoom;
-    const x = cover.cropX + (cover.cropW - w) * view.cx;
-    const y = cover.cropY + (cover.cropH - h) * view.cy;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.save();
-    const filters = [];
-    if (oldFilmEnabled) filters.push('sepia(0.35)', 'contrast(1.08)', 'saturate(0.75)', 'brightness(0.97)');
-    if (oldTvEnabled) filters.push('contrast(1.12)', 'saturate(0.8)', 'brightness(1.03)');
-    if (filters.length) ctx.filter = filters.join(' ');
-    ctx.drawImage(img, x, y, w, h, 0, 0, canvas.width, canvas.height);
-    ctx.restore();
-    if (oldTvEnabled) {
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighten';
-      ctx.globalAlpha = 0.1;
-      ctx.drawImage(img, x, y, w, h, -3, 0, canvas.width, canvas.height);
-      ctx.restore();
-    }
-    if (oldFilmEnabled) renderFilmEffect();
-    if (oldTvEnabled) renderTVEffect();
-    hud.textContent = view.zoom.toFixed(2) + '×';
-  }
-
-  function tick(now) {
-    if (startTime === null) startTime = now - pausedElapsed;
-    let elapsed = now - startTime;
-    let t = Math.min(elapsed / duration, 1);
-    const e = easeInOutSine(t);
-    const view = {
-      zoom: lerp(current.zoom, target.zoom, e),
-      cx: lerp(current.cx, target.cx, e),
-      cy: lerp(current.cy, target.cy, e)
-    };
-    drawView(view);
-    if (t >= 1) {
-      current = target;
-      target = randomView(current);
-      startTime = now;
-      pausedElapsed = 0;
-    }
-    if (isPlaying) rafId = requestAnimationFrame(tick);
-  }
-
-  function play() {
-    if (!img || isPlaying) return;
-    isPlaying = true;
-    playPauseBtn.textContent = 'Pausar';
-    startTime = null;
-    rafId = requestAnimationFrame(tick);
-  }
-
-  function pause() {
-    if (!isPlaying) return;
-    isPlaying = false;
-    playPauseBtn.textContent = 'Reproduzir';
-    cancelAnimationFrame(rafId);
-    if (startTime !== null) pausedElapsed = performance.now() - startTime;
-  }
-
-  function loadImage(file) {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const image = new Image();
-      image.onload = () => {
-        originalImg = image;
-        img = image;
-        cover = computeCover(img.naturalWidth, img.naturalHeight, canvas.width, canvas.height);
-        current = { zoom: 1, cx: 0.5, cy: 0.5 };
-        target = randomView(current);
-        updateDuration();
-        dropzone.classList.add('hidden');
-        hud.classList.add('visible');
-        playPauseBtn.disabled = false;
-        resetBtn.disabled = false;
-        newPhotoBtn.disabled = false;
-        cropStartBtn.disabled = false;
-        recordBtn.disabled = !supportsRecording();
-        statusEl.textContent = supportsRecording()
-          ? 'Pronto. Ajuste os controles ou baixe o vídeo.'
-          : 'Pronto para pré-visualizar. Gravação não é suportada neste navegador.';
-        statusEl.classList.remove('active');
-        play();
-      };
-      image.src = e.target.result;
-    };
-    reader.readAsDataURL(file);
-  }
-
-  dropzone.addEventListener('click', () => fileInput.click());
-  dropzone.addEventListener('dragover', (e) => { e.preventDefault(); });
-  dropzone.addEventListener('drop', (e) => {
-    e.preventDefault();
-    const file = e.dataTransfer.files[0];
-    if (file && file.type.startsWith('image/')) loadImage(file);
-  });
-  fileInput.addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    if (file) loadImage(file);
-  });
-
-  newPhotoBtn.addEventListener('click', () => {
-    pause();
-    img = null;
-    originalImg = null;
-    dropzone.classList.remove('hidden');
-    hud.classList.remove('visible');
-    playPauseBtn.disabled = true;
-    resetBtn.disabled = true;
-    newPhotoBtn.disabled = true;
-    cropStartBtn.disabled = true;
-    recordBtn.disabled = true;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    statusEl.textContent = 'Escolha uma foto para começar.';
-    statusEl.classList.remove('active');
-    fileInput.value = '';
-  });
-
-  playPauseBtn.addEventListener('click', () => { isPlaying ? pause() : play(); });
-
-  filmEffectBtn.addEventListener('click', () => {
-    oldFilmEnabled = !oldFilmEnabled;
-    filmEffectBtn.setAttribute('aria-pressed', String(oldFilmEnabled));
-    if (img && !isPlaying) drawView(current);
-  });
-
-  tvEffectBtn.addEventListener('click', () => {
-    oldTvEnabled = !oldTvEnabled;
-    tvEffectBtn.setAttribute('aria-pressed', String(oldTvEnabled));
-    if (img && !isPlaying) drawView(current);
-  });
 
   cropStartBtn.addEventListener('click', enterCropMode);
 
   cropCancelBtn.addEventListener('click', () => {
     exitCropMode();
-    drawView(current);
+    renderStaticFrame();
     if (wasPlayingBeforeCrop) play();
   });
 
   cropApplyBtn.addEventListener('click', () => {
     if (!cropRect) return;
+    const photo = photos[selectedIndex];
     const r = cropRect;
     const off = document.createElement('canvas');
     off.width = Math.max(1, Math.round(r.w));
     off.height = Math.max(1, Math.round(r.h));
-    off.getContext('2d').drawImage(originalImg, r.x, r.y, r.w, r.h, 0, 0, off.width, off.height);
+    off.getContext('2d').drawImage(photo.original, r.x, r.y, r.w, r.h, 0, 0, off.width, off.height);
     const cropped = new Image();
     cropped.onload = () => {
-      img = cropped;
-      cover = computeCover(img.naturalWidth, img.naturalHeight, canvas.width, canvas.height);
-      current = { zoom: 1, cx: 0.5, cy: 0.5 };
-      target = randomView(current);
-      pausedElapsed = 0;
-      startTime = null;
+      photo.working = cropped;
+      computeCoverForPhoto(photo);
+      resetPhotoView(photo);
       exitCropMode();
-      drawView(current);
+      renderThumbs();
+      renderStaticFrame();
       statusEl.textContent = 'Corte aplicado.';
       statusEl.classList.remove('active');
       if (wasPlayingBeforeCrop) play();
@@ -896,27 +1115,7 @@
   canvas.addEventListener('pointerup', endCropDrag);
   canvas.addEventListener('pointercancel', endCropDrag);
 
-  resetBtn.addEventListener('click', () => {
-    if (!img) return;
-    const wasPlaying = isPlaying;
-    if (isPlaying) pause();
-    current = { zoom: 1, cx: 0.5, cy: 0.5 };
-    target = randomView(current);
-    pausedElapsed = 0;
-    startTime = null;
-    drawView(current);
-    statusEl.textContent = 'Reiniciado.';
-    statusEl.classList.remove('active');
-    if (wasPlaying) play();
-  });
-
-  intensitySlider.addEventListener('input', () => {
-    intensityVal.textContent = intensitySlider.value + '%';
-  });
-  speedSlider.addEventListener('input', () => {
-    speedVal.textContent = speedSlider.value + '%';
-    updateDuration();
-  });
+  // ---- recording ----
 
   function supportsRecording() {
     return !!(canvas.captureStream && window.MediaRecorder);
@@ -931,22 +1130,24 @@
   }
 
   recordBtn.addEventListener('click', () => {
-    if (!img || !supportsRecording()) return;
+    if (!photos.length || !supportsRecording()) return;
     recordBtn.disabled = true;
     playPauseBtn.disabled = true;
     resetBtn.disabled = true;
-    newPhotoBtn.disabled = true;
+    clearAllBtn.disabled = true;
+    cropStartBtn.disabled = true;
     statusEl.textContent = 'Gravando...';
     statusEl.classList.add('active');
 
-    // garante que a gravação sempre começa do zoom mínimo (imagem totalmente aberta)
+    // sempre começa do início absoluto da sequência (foto 1, totalmente aberta)
     pause();
-    current = { zoom: 1, cx: 0.5, cy: 0.5 };
-    target = randomView(current);
-    pausedElapsed = 0;
-    startTime = null;
-    drawView(current);
+    resetSequence();
+    renderStaticFrame();
     play();
+
+    const totalMs = photos.length > 1
+      ? photos.length * (duration + TRANSITION_MS)
+      : duration;
 
     const stream = canvas.captureStream(30);
     const mimeType = pickMimeType();
@@ -966,19 +1167,21 @@
       recordBtn.disabled = false;
       playPauseBtn.disabled = false;
       resetBtn.disabled = false;
-      newPhotoBtn.disabled = false;
+      clearAllBtn.disabled = false;
+      cropStartBtn.disabled = false;
       statusEl.textContent = 'Vídeo baixado.';
       statusEl.classList.remove('active');
     };
 
     recorder.start();
-    setTimeout(() => recorder.stop(), Math.max(3000, duration));
+    setTimeout(() => recorder.stop(), Math.max(3000, totalMs));
   });
 
   updateDuration();
   applyAspect();
   buildGrainTiles();
   buildScanlinePattern();
+  updateControlsAvailability();
 })();
 </script>
 </body>
