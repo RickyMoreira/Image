@@ -270,10 +270,12 @@
     border-radius: 3px;
     overflow: hidden;
     border: 2px solid transparent;
-    cursor: pointer;
+    cursor: grab;
     background: var(--panel-2);
   }
   .thumb.selected { border-color: var(--accent); }
+  .thumb.dragging { opacity: 0.35; }
+  .thumb.drag-over { border-color: var(--text); }
   .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .thumb-remove {
     position: absolute;
@@ -776,13 +778,17 @@
     syncDurationInput();
   }
 
+  let dragSrcIndex = null;
+
   function renderThumbs() {
     thumbRow.innerHTML = '';
     photos.forEach((p, i) => {
       const wrap = document.createElement('div');
       wrap.className = 'thumb' + (i === selectedIndex ? ' selected' : '');
+      wrap.draggable = true;
       const im = document.createElement('img');
       im.src = p.original.src;
+      im.draggable = false;
       wrap.appendChild(im);
       const order = document.createElement('span');
       order.className = 'thumb-order';
@@ -791,15 +797,37 @@
       const rm = document.createElement('button');
       rm.className = 'thumb-remove';
       rm.type = 'button';
+      rm.draggable = false;
       rm.textContent = '×';
       rm.setAttribute('aria-label', 'Remover foto');
       rm.addEventListener('click', (ev) => { ev.stopPropagation(); removePhoto(i); });
       wrap.appendChild(rm);
-      wrap.addEventListener('click', () => {
-        selectedIndex = i;
-        renderThumbs();
-        updateControlsAvailability();
+
+      wrap.addEventListener('click', () => selectAndShowPhoto(i));
+
+      wrap.addEventListener('dragstart', (ev) => {
+        dragSrcIndex = i;
+        ev.dataTransfer.effectAllowed = 'move';
+        wrap.classList.add('dragging');
       });
+      wrap.addEventListener('dragend', () => {
+        wrap.classList.remove('dragging');
+        dragSrcIndex = null;
+        Array.from(thumbRow.children).forEach(c => c.classList.remove('drag-over'));
+      });
+      wrap.addEventListener('dragover', (ev) => {
+        ev.preventDefault();
+        ev.dataTransfer.dropEffect = 'move';
+        wrap.classList.add('drag-over');
+      });
+      wrap.addEventListener('dragleave', () => wrap.classList.remove('drag-over'));
+      wrap.addEventListener('drop', (ev) => {
+        ev.preventDefault();
+        wrap.classList.remove('drag-over');
+        if (dragSrcIndex === null || dragSrcIndex === i) return;
+        reorderPhoto(dragSrcIndex, i);
+      });
+
       thumbRow.appendChild(wrap);
     });
     const addBtn = document.createElement('button');
@@ -809,6 +837,35 @@
     addBtn.setAttribute('aria-label', 'Adicionar fotos');
     addBtn.addEventListener('click', () => fileInput.click());
     thumbRow.appendChild(addBtn);
+  }
+
+  function selectAndShowPhoto(i) {
+    selectedIndex = i;
+    if (isPlaying) pause();
+    currentIndex = i;
+    nextIndex = i;
+    sequencePhase = 'photo';
+    resetPhotoView(photos[i]);
+    pausedElapsed = 0;
+    phaseStart = null;
+    renderThumbs();
+    updateControlsAvailability();
+    renderStaticFrame();
+  }
+
+  function reorderPhoto(from, to) {
+    const wasPlaying = isPlaying;
+    if (isPlaying) pause();
+    const [moved] = photos.splice(from, 1);
+    photos.splice(to, 0, moved);
+    selectedIndex = to;
+    resetSequence();
+    currentIndex = to;
+    nextIndex = to;
+    renderThumbs();
+    updateControlsAvailability();
+    renderStaticFrame();
+    if (wasPlaying) play();
   }
 
   function onPhotosChanged(isFirstBatch) {
