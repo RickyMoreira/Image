@@ -334,8 +334,11 @@
       </div>
 
       <div class="field">
-        <label>Efeito</label>
-        <button class="btn toggle" id="filmEffect" type="button" aria-pressed="false">Filme antigo</button>
+        <label>Efeitos</label>
+        <div class="row">
+          <button class="btn toggle" id="filmEffect" type="button" aria-pressed="false">Filme antigo</button>
+          <button class="btn toggle" id="tvEffect" type="button" aria-pressed="false">TV antiga</button>
+        </div>
       </div>
 
       <div class="row" id="playbackRow">
@@ -370,6 +373,7 @@
   const newPhotoBtn = document.getElementById('newPhoto');
   const recordBtn = document.getElementById('record');
   const filmEffectBtn = document.getElementById('filmEffect');
+  const tvEffectBtn = document.getElementById('tvEffect');
   const statusEl = document.getElementById('status');
   const cropStartBtn = document.getElementById('cropStart');
   const cropControls = document.getElementById('cropControls');
@@ -377,7 +381,9 @@
   const cropApplyBtn = document.getElementById('cropApply');
 
   let oldFilmEnabled = false;
+  let oldTvEnabled = false;
   let grainTiles = [];
+  let scanlinePattern = null;
 
   let originalImg = null;
   let cropMode = false, wasPlayingBeforeCrop = false;
@@ -402,6 +408,42 @@
     return x - Math.floor(x);
   }
 
+  function buildScanlinePattern() {
+    const c = document.createElement('canvas');
+    c.width = 4; c.height = 4;
+    const pctx = c.getContext('2d');
+    pctx.clearRect(0, 0, 4, 4);
+    pctx.fillStyle = 'rgba(0,0,0,0.4)';
+    pctx.fillRect(0, 0, 4, 1);
+    scanlinePattern = ctx.createPattern(c, 'repeat');
+  }
+
+  function renderTVEffect() {
+    const w = canvas.width, h = canvas.height;
+
+    ctx.fillStyle = scanlinePattern;
+    ctx.fillRect(0, 0, w, h);
+
+    const grad = ctx.createRadialGradient(w / 2, h / 2, h * 0.35, w / 2, h / 2, h * 0.75);
+    grad.addColorStop(0, 'rgba(0,0,0,0)');
+    grad.addColorStop(1, 'rgba(0,0,0,0.4)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+
+    if (Math.random() < 0.08) {
+      const bandH = h * (0.015 + Math.random() * 0.03);
+      const bandY = Math.random() * (h - bandH);
+      ctx.fillStyle = 'rgba(255,255,255,0.22)';
+      ctx.fillRect(0, bandY, w, bandH);
+    }
+
+    if (Math.random() < 0.04) {
+      ctx.globalAlpha = 0.18;
+      const tile = grainTiles[Math.floor(Math.random() * grainTiles.length)];
+      ctx.drawImage(tile, 0, 0, w, h);
+      ctx.globalAlpha = 1;
+    }
+  }
   function buildGrainTiles() {
     grainTiles = [];
     const w = 320, h = 180;
@@ -432,17 +474,17 @@
     ctx.drawImage(tile, 0, 0, w, h);
     ctx.globalAlpha = 1;
 
-    if (Math.random() < 0.7) {
-      const scratches = 1 + Math.floor(Math.random() * 3);
+    if (Math.random() < 0.4) {
+      const scratches = 1 + Math.floor(Math.random() * 2);
       for (let i = 0; i < scratches; i++) {
         const x = Math.random() * w;
-        const segH = h * (0.4 + Math.random() * 0.6);
+        const segH = h * (0.3 + Math.random() * 0.6);
         const y = Math.random() * (h - segH);
-        ctx.strokeStyle = 'rgba(255,255,255,' + (0.35 + Math.random() * 0.4) + ')';
-        ctx.lineWidth = 2 + Math.random() * 2;
+        ctx.strokeStyle = 'rgba(255,255,255,' + (0.18 + Math.random() * 0.25) + ')';
+        ctx.lineWidth = 1 + Math.random() * 1.2;
         ctx.beginPath();
         ctx.moveTo(x, y);
-        ctx.lineTo(x + (Math.random() - 0.5) * 6, y + segH);
+        ctx.lineTo(x + (Math.random() - 0.5) * 4, y + segH);
         ctx.stroke();
       }
     }
@@ -663,12 +705,21 @@
     const y = cover.cropY + (cover.cropH - h) * view.cy;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.save();
-    if (oldFilmEnabled) {
-      ctx.filter = 'sepia(0.35) contrast(1.08) saturate(0.75) brightness(0.97)';
-    }
+    const filters = [];
+    if (oldFilmEnabled) filters.push('sepia(0.35)', 'contrast(1.08)', 'saturate(0.75)', 'brightness(0.97)');
+    if (oldTvEnabled) filters.push('contrast(1.12)', 'saturate(0.8)', 'brightness(1.03)');
+    if (filters.length) ctx.filter = filters.join(' ');
     ctx.drawImage(img, x, y, w, h, 0, 0, canvas.width, canvas.height);
     ctx.restore();
+    if (oldTvEnabled) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighten';
+      ctx.globalAlpha = 0.1;
+      ctx.drawImage(img, x, y, w, h, -3, 0, canvas.width, canvas.height);
+      ctx.restore();
+    }
     if (oldFilmEnabled) renderFilmEffect();
+    if (oldTvEnabled) renderTVEffect();
     hud.textContent = view.zoom.toFixed(2) + '×';
   }
 
@@ -771,6 +822,12 @@
   filmEffectBtn.addEventListener('click', () => {
     oldFilmEnabled = !oldFilmEnabled;
     filmEffectBtn.setAttribute('aria-pressed', String(oldFilmEnabled));
+    if (img && !isPlaying) drawView(current);
+  });
+
+  tvEffectBtn.addEventListener('click', () => {
+    oldTvEnabled = !oldTvEnabled;
+    tvEffectBtn.setAttribute('aria-pressed', String(oldTvEnabled));
     if (img && !isPlaying) drawView(current);
   });
 
@@ -921,6 +978,7 @@
   updateDuration();
   applyAspect();
   buildGrainTiles();
+  buildScanlinePattern();
 })();
 </script>
 </body>
