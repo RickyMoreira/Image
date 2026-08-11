@@ -453,12 +453,6 @@
       const dx = Math.random() * w, dy = Math.random() * h, r = 1 + Math.random() * 1.5;
       ctx.beginPath(); ctx.arc(dx, dy, r, 0, Math.PI * 2); ctx.fill();
     }
-
-    const grad = ctx.createRadialGradient(w / 2, h / 2, h * 0.25, w / 2, h / 2, h * 0.75);
-    grad.addColorStop(0, 'rgba(0,0,0,0)');
-    grad.addColorStop(1, 'rgba(0,0,0,0.55)');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, w, h);
   }
 
   function computeCover(imgW, imgH, cw, ch) {
