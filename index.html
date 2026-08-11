@@ -497,6 +497,7 @@
   let transitionType = 'fade'; // 'fade' | 'slide' | 'cut'
 
   let oldFilmEnabled = false;
+  let movementEnabled = false;
   let oldTvEnabled = false;
   let grainTiles = [];
   let scanlinePattern = null;
@@ -542,7 +543,7 @@
       speedValue: speedSlider.value,
       duration,
       transitionType,
-      oldFilmEnabled, oldTvEnabled
+      oldFilmEnabled, oldTvEnabled, movementEnabled
     };
   }
 
@@ -585,6 +586,9 @@
     filmEffectBtn.setAttribute('aria-pressed', String(oldFilmEnabled));
     oldTvEnabled = snap.oldTvEnabled;
     tvEffectBtn.setAttribute('aria-pressed', String(oldTvEnabled));
+    movementEnabled = snap.movementEnabled;
+    movementToggle.setAttribute('aria-pressed', String(movementEnabled));
+    movementControls.classList.toggle('hidden', !movementEnabled);
 
     if (!photos.length) {
       dropzone.classList.remove('hidden');
@@ -793,14 +797,17 @@
     }
   }
 
+  const STATIC_VIEW = { zoom: 1, cx: 0.5, cy: 0.5 };
+
   function renderStaticFrame() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     if (!photos.length) return;
     const p = photos[currentIndex];
-    renderPhotoFrame(p, p.current);
+    const view = movementEnabled ? p.current : STATIC_VIEW;
+    renderPhotoFrame(p, view);
     if (oldFilmEnabled) renderFilmEffect();
     if (oldTvEnabled) renderTVEffect();
-    hud.textContent = p.current.zoom.toFixed(2) + '×';
+    hud.textContent = view.zoom.toFixed(2) + '×';
   }
 
   function tick(now) {
@@ -815,33 +822,35 @@
 
     if (sequencePhase === 'photo') {
       const p = photos[currentIndex];
-      const view = {
+      const view = movementEnabled ? {
         zoom: lerp(p.current.zoom, p.target.zoom, e),
         cx: lerp(p.current.cx, p.target.cx, e),
         cy: lerp(p.current.cy, p.target.cy, e)
-      };
+      } : STATIC_VIEW;
       renderPhotoFrame(p, view);
       hudZoom = view.zoom;
     } else {
       const pA = photos[currentIndex];
       const pB = photos[nextIndex];
+      const viewA = movementEnabled ? pA.target : STATIC_VIEW;
+      const viewB = movementEnabled ? pB.current : STATIC_VIEW;
       if (transitionType === 'slide') {
         ctx.save();
         ctx.translate(-e * canvas.width, 0);
-        renderPhotoFrame(pA, pA.target);
+        renderPhotoFrame(pA, viewA);
         ctx.restore();
         ctx.save();
         ctx.translate((1 - e) * canvas.width, 0);
-        renderPhotoFrame(pB, pB.current);
+        renderPhotoFrame(pB, viewB);
         ctx.restore();
       } else {
-        renderPhotoFrame(pA, pA.target);
+        renderPhotoFrame(pA, viewA);
         ctx.save();
         ctx.globalAlpha = e;
-        renderPhotoFrame(pB, pB.current);
+        renderPhotoFrame(pB, viewB);
         ctx.restore();
       }
-      hudZoom = pB.current.zoom;
+      hudZoom = viewB.zoom;
     }
 
     if (oldFilmEnabled) renderFilmEffect();
@@ -1104,8 +1113,11 @@
   playPauseBtn.addEventListener('click', () => { isPlaying ? pause() : play(); });
 
   movementToggle.addEventListener('click', () => {
+    pushHistory();
     const open = movementControls.classList.toggle('hidden') === false;
     movementToggle.setAttribute('aria-pressed', String(open));
+    movementEnabled = open;
+    if (photos.length && !isPlaying) renderStaticFrame();
   });
 
   filmEffectBtn.addEventListener('click', () => {
