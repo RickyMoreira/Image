@@ -271,6 +271,13 @@
   .row { display: flex; gap: 10px; }
   .row .btn { flex: 1; }
 
+  .effects-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .effects-grid .btn { flex: 1 1 calc(50% - 5px); }
+
   input[type="file"] { display: none; }
 
   .thumb-row {
@@ -423,9 +430,13 @@
 
       <div class="field">
         <label>Efeitos</label>
-        <div class="row">
+        <div class="effects-grid">
           <button class="btn toggle" id="filmEffect" type="button" aria-pressed="false">Filme antigo</button>
           <button class="btn toggle" id="tvEffect" type="button" aria-pressed="false">TV antiga</button>
+          <button class="btn toggle" id="bwEffect" type="button" aria-pressed="false">Preto e branco</button>
+          <button class="btn toggle" id="vignetteEffect" type="button" aria-pressed="false">Vinheta suave</button>
+          <button class="btn toggle" id="glowEffect" type="button" aria-pressed="false">Brilho sonhador</button>
+          <button class="btn toggle" id="vhsEffect" type="button" aria-pressed="false">VHS</button>
         </div>
       </div>
 
@@ -483,6 +494,10 @@
   const recordBtn = document.getElementById('record');
   const filmEffectBtn = document.getElementById('filmEffect');
   const tvEffectBtn = document.getElementById('tvEffect');
+  const bwEffectBtn = document.getElementById('bwEffect');
+  const vignetteEffectBtn = document.getElementById('vignetteEffect');
+  const glowEffectBtn = document.getElementById('glowEffect');
+  const vhsEffectBtn = document.getElementById('vhsEffect');
   const statusEl = document.getElementById('status');
   const cropStartBtn = document.getElementById('cropStart');
   const cropControls = document.getElementById('cropControls');
@@ -499,8 +514,14 @@
   let oldFilmEnabled = false;
   let movementEnabled = false;
   let oldTvEnabled = false;
+  let bwEnabled = false;
+  let vignetteEnabled = false;
+  let glowEnabled = false;
+  let vhsEnabled = false;
   let grainTiles = [];
   let scanlinePattern = null;
+  const fringeCanvas = document.createElement('canvas');
+  const fringeCtx = fringeCanvas.getContext('2d');
 
   let photos = [];           // { original, working, cover, current, target }
   let selectedIndex = 0;     // which photo is targeted by crop / highlighted in thumbs
@@ -543,7 +564,8 @@
       speedValue: speedSlider.value,
       duration,
       transitionType,
-      oldFilmEnabled, oldTvEnabled, movementEnabled
+      oldFilmEnabled, oldTvEnabled, movementEnabled,
+      bwEnabled, vignetteEnabled, glowEnabled, vhsEnabled
     };
   }
 
@@ -589,6 +611,14 @@
     movementEnabled = snap.movementEnabled;
     movementToggle.setAttribute('aria-pressed', String(movementEnabled));
     movementControls.classList.toggle('hidden', !movementEnabled);
+    bwEnabled = snap.bwEnabled;
+    bwEffectBtn.setAttribute('aria-pressed', String(bwEnabled));
+    vignetteEnabled = snap.vignetteEnabled;
+    vignetteEffectBtn.setAttribute('aria-pressed', String(vignetteEnabled));
+    glowEnabled = snap.glowEnabled;
+    glowEffectBtn.setAttribute('aria-pressed', String(glowEnabled));
+    vhsEnabled = snap.vhsEnabled;
+    vhsEffectBtn.setAttribute('aria-pressed', String(vhsEnabled));
 
     if (!photos.length) {
       dropzone.classList.remove('hidden');
@@ -708,6 +738,48 @@
     }
   }
 
+  function renderVignetteEffect() {
+    const w = canvas.width, h = canvas.height;
+    const grad = ctx.createRadialGradient(w / 2, h / 2, h * 0.5, w / 2, h / 2, h * 0.95);
+    grad.addColorStop(0, 'rgba(0,0,0,0)');
+    grad.addColorStop(1, 'rgba(0,0,0,0.35)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+  }
+
+  function renderVhsTrackingEffect() {
+    const w = canvas.width, h = canvas.height;
+
+    ctx.fillStyle = scanlinePattern;
+    ctx.globalAlpha = 0.5;
+    ctx.fillRect(0, 0, w, h);
+    ctx.globalAlpha = 1;
+
+    if (Math.random() < 0.18) {
+      const bandH = h * (0.01 + Math.random() * 0.025);
+      const bandY = Math.random() * (h - bandH);
+      ctx.fillStyle = Math.random() < 0.5 ? 'rgba(255,0,180,0.18)' : 'rgba(0,220,255,0.18)';
+      ctx.fillRect(0, bandY, w, bandH);
+    }
+  }
+
+  function drawChromaGhost(photo, x, y, w, h, color, offsetX) {
+    fringeCanvas.width = canvas.width;
+    fringeCanvas.height = canvas.height;
+    fringeCtx.clearRect(0, 0, fringeCanvas.width, fringeCanvas.height);
+    fringeCtx.drawImage(photo.working, x, y, w, h, 0, 0, fringeCanvas.width, fringeCanvas.height);
+    fringeCtx.globalCompositeOperation = 'source-atop';
+    fringeCtx.fillStyle = color;
+    fringeCtx.fillRect(0, 0, fringeCanvas.width, fringeCanvas.height);
+    fringeCtx.globalCompositeOperation = 'source-over';
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    ctx.globalAlpha = 0.4;
+    ctx.drawImage(fringeCanvas, offsetX, 0);
+    ctx.restore();
+  }
+
   function computeCover(imgW, imgH, cw, ch) {
     const imgRatio = imgW / imgH;
     const canvasRatio = cw / ch;
@@ -785,6 +857,8 @@
     const filters = [];
     if (oldFilmEnabled) filters.push('sepia(0.35)', 'contrast(1.08)', 'saturate(0.75)', 'brightness(0.97)');
     if (oldTvEnabled) filters.push('contrast(1.12)', 'saturate(0.8)', 'brightness(1.03)');
+    if (vhsEnabled) filters.push('saturate(1.25)', 'contrast(1.05)');
+    if (bwEnabled) filters.push('grayscale(1)', 'contrast(1.08)');
     if (filters.length) ctx.filter = filters.join(' ');
     ctx.drawImage(photo.working, x, y, w, h, 0, 0, canvas.width, canvas.height);
     ctx.restore();
@@ -793,6 +867,18 @@
       ctx.globalCompositeOperation = 'lighten';
       ctx.globalAlpha = 0.1;
       ctx.drawImage(photo.working, x, y, w, h, -3, 0, canvas.width, canvas.height);
+      ctx.restore();
+    }
+    if (vhsEnabled && !bwEnabled) {
+      drawChromaGhost(photo, x, y, w, h, '#ff2a6d', -3);
+      drawChromaGhost(photo, x, y, w, h, '#05d9e8', 3);
+    }
+    if (glowEnabled) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'screen';
+      ctx.globalAlpha = 0.35;
+      ctx.filter = 'blur(18px) brightness(1.3) saturate(1.1)';
+      ctx.drawImage(photo.working, x, y, w, h, 0, 0, canvas.width, canvas.height);
       ctx.restore();
     }
   }
@@ -807,6 +893,8 @@
     renderPhotoFrame(p, view);
     if (oldFilmEnabled) renderFilmEffect();
     if (oldTvEnabled) renderTVEffect();
+    if (vhsEnabled) renderVhsTrackingEffect();
+    if (vignetteEnabled) renderVignetteEffect();
     hud.textContent = view.zoom.toFixed(2) + '×';
   }
 
@@ -855,6 +943,8 @@
 
     if (oldFilmEnabled) renderFilmEffect();
     if (oldTvEnabled) renderTVEffect();
+    if (vhsEnabled) renderVhsTrackingEffect();
+    if (vignetteEnabled) renderVignetteEffect();
     hud.textContent = hudZoom.toFixed(2) + '×';
 
     if (t >= 1) {
@@ -1134,6 +1224,34 @@
     if (photos.length && !isPlaying) renderStaticFrame();
   });
 
+  bwEffectBtn.addEventListener('click', () => {
+    pushHistory();
+    bwEnabled = !bwEnabled;
+    bwEffectBtn.setAttribute('aria-pressed', String(bwEnabled));
+    if (photos.length && !isPlaying) renderStaticFrame();
+  });
+
+  vignetteEffectBtn.addEventListener('click', () => {
+    pushHistory();
+    vignetteEnabled = !vignetteEnabled;
+    vignetteEffectBtn.setAttribute('aria-pressed', String(vignetteEnabled));
+    if (photos.length && !isPlaying) renderStaticFrame();
+  });
+
+  glowEffectBtn.addEventListener('click', () => {
+    pushHistory();
+    glowEnabled = !glowEnabled;
+    glowEffectBtn.setAttribute('aria-pressed', String(glowEnabled));
+    if (photos.length && !isPlaying) renderStaticFrame();
+  });
+
+  vhsEffectBtn.addEventListener('click', () => {
+    pushHistory();
+    vhsEnabled = !vhsEnabled;
+    vhsEffectBtn.setAttribute('aria-pressed', String(vhsEnabled));
+    if (photos.length && !isPlaying) renderStaticFrame();
+  });
+
   resetBtn.addEventListener('click', () => {
     if (!photos.length) return;
     const wasPlaying = isPlaying;
@@ -1358,7 +1476,7 @@
     const original = photos[selectedIndex].original;
     cropRect = { x: 0, y: 0, w: original.naturalWidth, h: original.naturalHeight };
     cropControls.classList.remove('hidden');
-    [playPauseBtn, resetBtn, clearAllBtn, recordBtn, cropStartBtn, filmEffectBtn, tvEffectBtn, aspectSelect, intensitySlider, speedSlider, photoDurationSlider, transitionSelect].forEach(el => el.disabled = true);
+    [playPauseBtn, resetBtn, clearAllBtn, recordBtn, cropStartBtn, filmEffectBtn, tvEffectBtn, bwEffectBtn, vignetteEffectBtn, glowEffectBtn, vhsEffectBtn, movementToggle, aspectSelect, intensitySlider, speedSlider, photoDurationSlider, transitionSelect].forEach(el => el.disabled = true);
     thumbRow.classList.add('hidden-interact');
     thumbRow.style.pointerEvents = 'none';
     drawCropOverlay();
@@ -1369,7 +1487,7 @@
     cropDragMode = null;
     cropControls.classList.add('hidden');
     thumbRow.style.pointerEvents = '';
-    [playPauseBtn, resetBtn, clearAllBtn, cropStartBtn, filmEffectBtn, tvEffectBtn, aspectSelect, intensitySlider, speedSlider, transitionSelect].forEach(el => el.disabled = false);
+    [playPauseBtn, resetBtn, clearAllBtn, cropStartBtn, filmEffectBtn, tvEffectBtn, bwEffectBtn, vignetteEffectBtn, glowEffectBtn, vhsEffectBtn, movementToggle, aspectSelect, intensitySlider, speedSlider, transitionSelect].forEach(el => el.disabled = false);
     photoDurationSlider.disabled = !photos.length;
     recordBtn.disabled = !supportsRecording();
   }
