@@ -734,6 +734,13 @@
     photos.forEach(resetPhotoView);
   }
 
+  function syncSelectionToCurrent() {
+    if (selectedIndex === currentIndex) return;
+    selectedIndex = currentIndex;
+    renderThumbs();
+    updateControlsAvailability();
+  }
+
   function renderPhotoFrame(photo, view) {
     const cover = photo.cover;
     const w = cover.cropW / view.zoom;
@@ -820,6 +827,7 @@
           resetPhotoView(photos[nextIndex]);
           if (transitionType === 'cut') {
             currentIndex = nextIndex;
+            syncSelectionToCurrent();
           } else {
             sequencePhase = 'transition';
           }
@@ -829,6 +837,7 @@
       } else {
         currentIndex = nextIndex;
         sequencePhase = 'photo';
+        syncSelectionToCurrent();
       }
       phaseStart = now;
       pausedElapsed = 0;
@@ -979,7 +988,7 @@
     }
   }
 
-  function addPhotoFromFile(file, isFirstOfBatch) {
+  function addPhotoFromFile(file, isInitialBatch) {
     const reader = new FileReader();
     reader.onload = (e) => {
       const image = new Image();
@@ -989,7 +998,11 @@
         computeCoverForPhoto(photo);
         resetPhotoView(photo);
         photos.push(photo);
-        selectedIndex = photos.length - 1;
+        if (!isInitialBatch) {
+          selectedIndex = photos.length - 1;
+        } else if (wasEmpty) {
+          selectedIndex = 0;
+        }
         onPhotosChanged(wasEmpty);
         if (!wasEmpty) { renderThumbs(); updateControlsAvailability(); }
       };
@@ -1002,7 +1015,8 @@
     const imgFiles = Array.from(fileList).filter(f => f.type.startsWith('image/'));
     if (!imgFiles.length) return;
     pushHistory();
-    imgFiles.forEach((f) => addPhotoFromFile(f));
+    const isInitialBatch = photos.length === 0;
+    imgFiles.forEach((f) => addPhotoFromFile(f, isInitialBatch));
   }
 
   function removePhoto(index) {
