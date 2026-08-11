@@ -558,35 +558,30 @@
   }
 
   function resizeFromCorner(corner, posImg) {
-    const aspect = canvas.width / canvas.height;
     const imgW = originalImg.naturalWidth, imgH = originalImg.naturalHeight;
-    const minSize = Math.min(imgW, imgH) * 0.12;
+    const minSize = Math.min(imgW, imgH) * 0.05;
     const r = cropDragOrigRect;
     let x = r.x, y = r.y, w = r.w, h = r.h;
 
     if (corner === 'br') {
-      let newW = clamp(posImg.x - r.x, minSize, imgW - r.x);
-      let newH = newW / aspect;
-      if (r.y + newH > imgH) { newH = imgH - r.y; newW = newH * aspect; }
-      w = newW; h = newH; x = r.x; y = r.y;
+      const nx2 = clamp(posImg.x, r.x + minSize, imgW);
+      const ny2 = clamp(posImg.y, r.y + minSize, imgH);
+      w = nx2 - r.x; h = ny2 - r.y; x = r.x; y = r.y;
     } else if (corner === 'tl') {
       const anchorX = r.x + r.w, anchorY = r.y + r.h;
-      let newW = clamp(anchorX - posImg.x, minSize, anchorX);
-      let newH = newW / aspect;
-      if (anchorY - newH < 0) { newH = anchorY; newW = newH * aspect; }
-      w = newW; h = newH; x = anchorX - newW; y = anchorY - newH;
+      const nx1 = clamp(posImg.x, 0, anchorX - minSize);
+      const ny1 = clamp(posImg.y, 0, anchorY - minSize);
+      x = nx1; y = ny1; w = anchorX - nx1; h = anchorY - ny1;
     } else if (corner === 'tr') {
       const anchorY = r.y + r.h;
-      let newW = clamp(posImg.x - r.x, minSize, imgW - r.x);
-      let newH = newW / aspect;
-      if (anchorY - newH < 0) { newH = anchorY; newW = newH * aspect; }
-      w = newW; h = newH; x = r.x; y = anchorY - newH;
+      const nx2 = clamp(posImg.x, r.x + minSize, imgW);
+      const ny1 = clamp(posImg.y, 0, anchorY - minSize);
+      w = nx2 - r.x; h = anchorY - ny1; x = r.x; y = ny1;
     } else if (corner === 'bl') {
       const anchorX = r.x + r.w;
-      let newW = clamp(anchorX - posImg.x, minSize, anchorX);
-      let newH = newW / aspect;
-      if (r.y + newH > imgH) { newH = imgH - r.y; newW = newH * aspect; }
-      w = newW; h = newH; x = anchorX - newW; y = r.y;
+      const nx1 = clamp(posImg.x, 0, anchorX - minSize);
+      const ny2 = clamp(posImg.y, r.y + minSize, imgH);
+      w = anchorX - nx1; h = ny2 - r.y; x = nx1; y = r.y;
     }
     cropRect = { x, y, w, h };
   }
@@ -608,8 +603,7 @@
     wasPlayingBeforeCrop = isPlaying;
     if (isPlaying) pause();
     cropMode = true;
-    const maxRect = computeCover(originalImg.naturalWidth, originalImg.naturalHeight, canvas.width, canvas.height);
-    cropRect = { x: maxRect.cropX, y: maxRect.cropY, w: maxRect.cropW, h: maxRect.cropH };
+    cropRect = { x: 0, y: 0, w: originalImg.naturalWidth, h: originalImg.naturalHeight };
     cropControls.classList.remove('hidden');
     [playPauseBtn, resetBtn, newPhotoBtn, recordBtn, cropStartBtn, filmEffectBtn, aspectSelect, intensitySlider, speedSlider].forEach(el => el.disabled = true);
     drawCropOverlay();
