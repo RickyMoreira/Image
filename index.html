@@ -138,6 +138,15 @@
     border-radius: 4px;
     background: rgba(209, 75, 42, 0.05);
   }
+  .movement-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+    padding: 14px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: var(--panel-2);
+  }
   .crop-hint {
     margin: 0;
     font-size: 11px;
@@ -366,21 +375,28 @@
       </div>
 
       <div class="field">
-        <label>Intensidade <span class="val" id="intensityVal">40%</span></label>
-        <input type="range" id="intensity" min="0" max="100" value="40">
-        <div class="scale-labels"><span>Sutil</span><span>Intenso</span></div>
+        <label>Movimento</label>
+        <button class="btn toggle" id="movementToggle" type="button" aria-pressed="false">Ajustar movimento</button>
       </div>
 
-      <div class="field">
-        <label>Velocidade (padrão p/ novas fotos) <span class="val" id="speedVal">50%</span></label>
-        <input type="range" id="speed" min="0" max="100" value="50">
-        <div class="scale-labels"><span>Devagar</span><span>Rápido</span></div>
-      </div>
+      <div class="movement-controls hidden" id="movementControls">
+        <div class="field">
+          <label>Intensidade <span class="val" id="intensityVal">40%</span></label>
+          <input type="range" id="intensity" min="0" max="100" value="40">
+          <div class="scale-labels"><span>Sutil</span><span>Intenso</span></div>
+        </div>
 
-      <div class="field">
-        <label>Duração da foto selecionada <span class="val" id="photoDurationVal">8.0s</span></label>
-        <input type="range" id="photoDuration" min="2" max="20" step="0.5" value="8" disabled>
-        <div class="scale-labels"><span>2s</span><span>20s</span></div>
+        <div class="field">
+          <label>Velocidade (padrão p/ novas fotos) <span class="val" id="speedVal">50%</span></label>
+          <input type="range" id="speed" min="0" max="100" value="50">
+          <div class="scale-labels"><span>Devagar</span><span>Rápido</span></div>
+        </div>
+
+        <div class="field">
+          <label>Duração da foto selecionada <span class="val" id="photoDurationVal">8.0s</span></label>
+          <input type="range" id="photoDuration" min="2" max="20" step="0.5" value="8" disabled>
+          <div class="scale-labels"><span>2s</span><span>20s</span></div>
+        </div>
       </div>
 
       <div class="field">
@@ -474,6 +490,8 @@
   const cropApplyBtn = document.getElementById('cropApply');
   const cropTargetVal = document.getElementById('cropTargetVal');
   const undoBtn = document.getElementById('undoBtn');
+  const movementToggle = document.getElementById('movementToggle');
+  const movementControls = document.getElementById('movementControls');
 
   const TRANSITION_MS = 700;
   let transitionType = 'fade'; // 'fade' | 'slide' | 'cut'
@@ -1084,6 +1102,11 @@
   });
 
   playPauseBtn.addEventListener('click', () => { isPlaying ? pause() : play(); });
+
+  movementToggle.addEventListener('click', () => {
+    const open = movementControls.classList.toggle('hidden') === false;
+    movementToggle.setAttribute('aria-pressed', String(open));
+  });
 
   filmEffectBtn.addEventListener('click', () => {
     pushHistory();
