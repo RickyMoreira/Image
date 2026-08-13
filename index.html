@@ -456,9 +456,6 @@
       <div class="field">
         <label>Marca d'água</label>
         <input type="text" id="watermarkText" value="easymidia.vercel.app" placeholder="Texto da marca d'água">
-        <div class="row" style="margin-top: 10px;">
-          <button class="btn toggle" id="watermarkToggle" type="button" aria-pressed="false">Mostrar no vídeo</button>
-        </div>
       </div>
 
       <div class="row">
@@ -520,7 +517,6 @@
   const glowEffectBtn = document.getElementById('glowEffect');
   const vhsEffectBtn = document.getElementById('vhsEffect');
   const watermarkText = document.getElementById('watermarkText');
-  const watermarkToggle = document.getElementById('watermarkToggle');
   const statusEl = document.getElementById('status');
   const cropStartBtn = document.getElementById('cropStart');
   const cropControls = document.getElementById('cropControls');
@@ -541,7 +537,6 @@
   let vignetteEnabled = false;
   let glowEnabled = false;
   let vhsEnabled = false;
-  let watermarkEnabled = false;
   let grainTiles = [];
   let scanlinePattern = null;
   const fringeCanvas = document.createElement('canvas');
@@ -590,7 +585,7 @@
       transitionType,
       oldFilmEnabled, oldTvEnabled, movementEnabled,
       bwEnabled, vignetteEnabled, glowEnabled, vhsEnabled,
-      watermarkEnabled, watermarkTextValue: watermarkText.value
+      watermarkTextValue: watermarkText.value
     };
   }
 
@@ -644,8 +639,6 @@
     glowEffectBtn.setAttribute('aria-pressed', String(glowEnabled));
     vhsEnabled = snap.vhsEnabled;
     vhsEffectBtn.setAttribute('aria-pressed', String(vhsEnabled));
-    watermarkEnabled = snap.watermarkEnabled;
-    watermarkToggle.setAttribute('aria-pressed', String(watermarkEnabled));
     watermarkText.value = snap.watermarkTextValue;
 
     if (!photos.length) {
@@ -770,16 +763,23 @@
     const text = watermarkText.value.trim();
     if (!text) return;
     const w = canvas.width, h = canvas.height;
-    const fontSize = Math.max(14, Math.round(w * 0.018));
-    const padding = Math.round(fontSize * 0.9);
+    const fontSize = Math.max(22, Math.round(w * 0.032));
+    const padX = Math.round(fontSize * 0.6);
+    const padY = Math.round(fontSize * 0.4);
+    const margin = Math.round(fontSize * 0.7);
     ctx.save();
     ctx.font = fontSize + 'px "IBM Plex Mono", monospace';
     ctx.textAlign = 'right';
     ctx.textBaseline = 'bottom';
-    ctx.shadowColor = 'rgba(0,0,0,0.6)';
-    ctx.shadowBlur = 4;
-    ctx.fillStyle = 'rgba(255,255,255,0.82)';
-    ctx.fillText(text, w - padding, h - padding);
+    const textWidth = ctx.measureText(text).width;
+    const boxRight = w - margin;
+    const boxBottom = h - margin;
+    const boxLeft = boxRight - textWidth - padX * 2;
+    const boxTop = boxBottom - fontSize - padY * 2;
+    ctx.fillStyle = 'rgba(0,0,0,0.72)';
+    ctx.fillRect(boxLeft, boxTop, boxRight - boxLeft, boxBottom - boxTop);
+    ctx.fillStyle = '#EFE6D8';
+    ctx.fillText(text, boxRight - padX, boxBottom - padY);
     ctx.restore();
   }
 
@@ -945,7 +945,7 @@
     if (oldTvEnabled) renderTVEffect();
     if (vhsEnabled) renderVhsTrackingEffect();
     if (vignetteEnabled) renderVignetteEffect();
-    if (watermarkEnabled) renderWatermark();
+    renderWatermark();
     hud.textContent = view.zoom.toFixed(2) + '×';
   }
 
@@ -996,7 +996,7 @@
     if (oldTvEnabled) renderTVEffect();
     if (vhsEnabled) renderVhsTrackingEffect();
     if (vignetteEnabled) renderVignetteEffect();
-    if (watermarkEnabled) renderWatermark();
+    renderWatermark();
     hud.textContent = hudZoom.toFixed(2) + '×';
 
     if (t >= 1) {
@@ -1304,13 +1304,6 @@
     if (photos.length && !isPlaying) renderStaticFrame();
   });
 
-  watermarkToggle.addEventListener('click', () => {
-    pushHistory();
-    watermarkEnabled = !watermarkEnabled;
-    watermarkToggle.setAttribute('aria-pressed', String(watermarkEnabled));
-    if (photos.length && !isPlaying) renderStaticFrame();
-  });
-
   let watermarkTextHistoryPending = null;
   watermarkText.addEventListener('focus', () => { watermarkTextHistoryPending = snapshotState(); });
   watermarkText.addEventListener('input', () => {
@@ -1549,7 +1542,7 @@
     const original = photos[selectedIndex].original;
     cropRect = { x: 0, y: 0, w: original.naturalWidth, h: original.naturalHeight };
     cropControls.classList.remove('hidden');
-    [playPauseBtn, resetBtn, clearAllBtn, recordBtn, cropStartBtn, filmEffectBtn, tvEffectBtn, bwEffectBtn, vignetteEffectBtn, glowEffectBtn, vhsEffectBtn, watermarkToggle, watermarkText, movementToggle, aspectSelect, intensitySlider, speedSlider, photoDurationSlider, transitionSelect].forEach(el => el.disabled = true);
+    [playPauseBtn, resetBtn, clearAllBtn, recordBtn, cropStartBtn, filmEffectBtn, tvEffectBtn, bwEffectBtn, vignetteEffectBtn, glowEffectBtn, vhsEffectBtn, watermarkText, movementToggle, aspectSelect, intensitySlider, speedSlider, photoDurationSlider, transitionSelect].forEach(el => el.disabled = true);
     thumbRow.classList.add('hidden-interact');
     thumbRow.style.pointerEvents = 'none';
     drawCropOverlay();
@@ -1560,7 +1553,7 @@
     cropDragMode = null;
     cropControls.classList.add('hidden');
     thumbRow.style.pointerEvents = '';
-    [playPauseBtn, resetBtn, clearAllBtn, cropStartBtn, filmEffectBtn, tvEffectBtn, bwEffectBtn, vignetteEffectBtn, glowEffectBtn, vhsEffectBtn, watermarkToggle, watermarkText, movementToggle, aspectSelect, intensitySlider, speedSlider, transitionSelect].forEach(el => el.disabled = false);
+    [playPauseBtn, resetBtn, clearAllBtn, cropStartBtn, filmEffectBtn, tvEffectBtn, bwEffectBtn, vignetteEffectBtn, glowEffectBtn, vhsEffectBtn, watermarkText, movementToggle, aspectSelect, intensitySlider, speedSlider, transitionSelect].forEach(el => el.disabled = false);
     photoDurationSlider.disabled = !photos.length;
     recordBtn.disabled = !supportsRecording();
   }
