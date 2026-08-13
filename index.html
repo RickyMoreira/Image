@@ -1049,6 +1049,7 @@
       const pB = photos[nextIndex];
       const viewA = movementEnabled ? pA.target : STATIC_VIEW;
       const viewB = movementEnabled ? pB.current : STATIC_VIEW;
+      const buildProgressIn = (sketchEnabled || sprayEnabled) ? 0 : 1;
       if (transitionType === 'slide') {
         ctx.save();
         ctx.translate(-e * canvas.width, 0);
@@ -1056,13 +1057,13 @@
         ctx.restore();
         ctx.save();
         ctx.translate((1 - e) * canvas.width, 0);
-        renderPhotoFrame(pB, viewB, 1);
+        renderPhotoFrame(pB, viewB, buildProgressIn);
         ctx.restore();
       } else {
         renderPhotoFrame(pA, viewA, 1);
         ctx.save();
         ctx.globalAlpha = e;
-        renderPhotoFrame(pB, viewB, 1);
+        renderPhotoFrame(pB, viewB, buildProgressIn);
         ctx.restore();
       }
       hudZoom = viewB.zoom;
