@@ -444,12 +444,11 @@
       <div class="field">
         <label>Efeitos</label>
         <div class="effects-grid">
-          <button class="btn toggle" id="filmEffect" type="button" aria-pressed="false">Filme antigo</button>
           <button class="btn toggle" id="tvEffect" type="button" aria-pressed="false">TV antiga</button>
           <button class="btn toggle" id="bwEffect" type="button" aria-pressed="false">Preto e branco</button>
           <button class="btn toggle" id="vignetteEffect" type="button" aria-pressed="false">Vinheta suave</button>
           <button class="btn toggle" id="glowEffect" type="button" aria-pressed="false">Brilho sonhador</button>
-          <button class="btn toggle" id="vhsEffect" type="button" aria-pressed="false">VHS</button>
+          <button class="btn toggle" id="sketchEffect" type="button" aria-pressed="false">Spray &amp; Esboço</button>
         </div>
       </div>
 
@@ -510,12 +509,11 @@
   const resetBtn = document.getElementById('reset');
   const clearAllBtn = document.getElementById('clearAll');
   const recordBtn = document.getElementById('record');
-  const filmEffectBtn = document.getElementById('filmEffect');
   const tvEffectBtn = document.getElementById('tvEffect');
   const bwEffectBtn = document.getElementById('bwEffect');
   const vignetteEffectBtn = document.getElementById('vignetteEffect');
   const glowEffectBtn = document.getElementById('glowEffect');
-  const vhsEffectBtn = document.getElementById('vhsEffect');
+  const sketchEffectBtn = document.getElementById('sketchEffect');
   const watermarkText = document.getElementById('watermarkText');
   const statusEl = document.getElementById('status');
   const cropStartBtn = document.getElementById('cropStart');
@@ -530,17 +528,14 @@
   const TRANSITION_MS = 700;
   let transitionType = 'fade'; // 'fade' | 'slide' | 'cut'
 
-  let oldFilmEnabled = false;
   let movementEnabled = false;
   let oldTvEnabled = false;
   let bwEnabled = false;
   let vignetteEnabled = false;
   let glowEnabled = false;
-  let vhsEnabled = false;
+  let sketchEnabled = false;
   let grainTiles = [];
   let scanlinePattern = null;
-  const fringeCanvas = document.createElement('canvas');
-  const fringeCtx = fringeCanvas.getContext('2d');
 
   let photos = [];           // { original, working, cover, current, target }
   let selectedIndex = 0;     // which photo is targeted by crop / highlighted in thumbs
@@ -583,8 +578,8 @@
       speedValue: speedSlider.value,
       duration,
       transitionType,
-      oldFilmEnabled, oldTvEnabled, movementEnabled,
-      bwEnabled, vignetteEnabled, glowEnabled, vhsEnabled,
+      oldTvEnabled, movementEnabled,
+      bwEnabled, vignetteEnabled, glowEnabled, sketchEnabled,
       watermarkTextValue: watermarkText.value
     };
   }
@@ -624,8 +619,6 @@
     transitionType = snap.transitionType;
     transitionSelect.value = snap.transitionType;
 
-    oldFilmEnabled = snap.oldFilmEnabled;
-    filmEffectBtn.setAttribute('aria-pressed', String(oldFilmEnabled));
     oldTvEnabled = snap.oldTvEnabled;
     tvEffectBtn.setAttribute('aria-pressed', String(oldTvEnabled));
     movementEnabled = snap.movementEnabled;
@@ -637,8 +630,8 @@
     vignetteEffectBtn.setAttribute('aria-pressed', String(vignetteEnabled));
     glowEnabled = snap.glowEnabled;
     glowEffectBtn.setAttribute('aria-pressed', String(glowEnabled));
-    vhsEnabled = snap.vhsEnabled;
-    vhsEffectBtn.setAttribute('aria-pressed', String(vhsEnabled));
+    sketchEnabled = snap.sketchEnabled;
+    sketchEffectBtn.setAttribute('aria-pressed', String(sketchEnabled));
     watermarkText.value = snap.watermarkTextValue;
 
     if (!photos.length) {
@@ -694,41 +687,6 @@
       }
       gctx.putImageData(data, 0, 0);
       grainTiles.push(c);
-    }
-  }
-
-  function renderFilmEffect() {
-    const w = canvas.width, h = canvas.height;
-
-    const flicker = 0.03 + Math.random() * 0.06;
-    ctx.fillStyle = Math.random() < 0.5 ? 'rgba(0,0,0,' + flicker + ')' : 'rgba(255,255,255,' + (flicker * 0.5) + ')';
-    ctx.fillRect(0, 0, w, h);
-
-    const tile = grainTiles[Math.floor(Math.random() * grainTiles.length)];
-    ctx.globalAlpha = 0.5;
-    ctx.drawImage(tile, 0, 0, w, h);
-    ctx.globalAlpha = 1;
-
-    if (Math.random() < 0.4) {
-      const scratches = 1 + Math.floor(Math.random() * 2);
-      for (let i = 0; i < scratches; i++) {
-        const x = Math.random() * w;
-        const segH = h * (0.3 + Math.random() * 0.6);
-        const y = Math.random() * (h - segH);
-        ctx.strokeStyle = 'rgba(255,255,255,' + (0.18 + Math.random() * 0.25) + ')';
-        ctx.lineWidth = 1 + Math.random() * 1.2;
-        ctx.beginPath();
-        ctx.moveTo(x, y);
-        ctx.lineTo(x + (Math.random() - 0.5) * 4, y + segH);
-        ctx.stroke();
-      }
-    }
-
-    const dustCount = Math.floor(Math.random() * 4);
-    ctx.fillStyle = 'rgba(255,255,255,0.6)';
-    for (let i = 0; i < dustCount; i++) {
-      const dx = Math.random() * w, dy = Math.random() * h, r = 1 + Math.random() * 1.5;
-      ctx.beginPath(); ctx.arc(dx, dy, r, 0, Math.PI * 2); ctx.fill();
     }
   }
 
@@ -797,36 +755,26 @@
     ctx.restore();
   }
 
-  function renderVhsTrackingEffect() {
+  function renderSprayPaintSpecks() {
     const w = canvas.width, h = canvas.height;
-
-    ctx.fillStyle = scanlinePattern;
-    ctx.globalAlpha = 0.5;
-    ctx.fillRect(0, 0, w, h);
-    ctx.globalAlpha = 1;
-
-    if (Math.random() < 0.18) {
-      const bandH = h * (0.01 + Math.random() * 0.025);
-      const bandY = Math.random() * (h - bandH);
-      ctx.fillStyle = Math.random() < 0.5 ? 'rgba(255,0,180,0.18)' : 'rgba(0,220,255,0.18)';
-      ctx.fillRect(0, bandY, w, bandH);
+    const colors = ['rgba(255,255,255,0.5)', 'rgba(10,8,7,0.4)', 'rgba(209,75,42,0.35)'];
+    const speckCount = 10 + Math.floor(Math.random() * 14);
+    for (let i = 0; i < speckCount; i++) {
+      const dx = Math.random() * w, dy = Math.random() * h;
+      const r = 1.5 + Math.random() * 5;
+      ctx.fillStyle = colors[Math.floor(Math.random() * colors.length)];
+      ctx.beginPath();
+      ctx.arc(dx, dy, r, 0, Math.PI * 2);
+      ctx.fill();
     }
   }
 
-  function drawChromaGhost(photo, x, y, w, h, color, offsetX) {
-    fringeCanvas.width = canvas.width;
-    fringeCanvas.height = canvas.height;
-    fringeCtx.clearRect(0, 0, fringeCanvas.width, fringeCanvas.height);
-    fringeCtx.drawImage(photo.working, x, y, w, h, 0, 0, fringeCanvas.width, fringeCanvas.height);
-    fringeCtx.globalCompositeOperation = 'source-atop';
-    fringeCtx.fillStyle = color;
-    fringeCtx.fillRect(0, 0, fringeCanvas.width, fringeCanvas.height);
-    fringeCtx.globalCompositeOperation = 'source-over';
-
+  function drawSketchOverlay(photo, x, y, w, h) {
     ctx.save();
-    ctx.globalCompositeOperation = 'screen';
-    ctx.globalAlpha = 0.4;
-    ctx.drawImage(fringeCanvas, offsetX, 0);
+    ctx.filter = 'grayscale(1) invert(1) blur(5px)';
+    ctx.globalCompositeOperation = 'color-dodge';
+    ctx.globalAlpha = 0.85;
+    ctx.drawImage(photo.working, x, y, w, h, 0, 0, canvas.width, canvas.height);
     ctx.restore();
   }
 
@@ -905,9 +853,8 @@
     const y = cover.cropY + (cover.cropH - h) * view.cy;
     ctx.save();
     const filters = [];
-    if (oldFilmEnabled) filters.push('sepia(0.35)', 'contrast(1.08)', 'saturate(0.75)', 'brightness(0.97)');
     if (oldTvEnabled) filters.push('contrast(1.12)', 'saturate(0.8)', 'brightness(1.03)');
-    if (vhsEnabled) filters.push('saturate(1.25)', 'contrast(1.05)');
+    if (sketchEnabled) filters.push('saturate(1.4)', 'contrast(1.25)');
     if (bwEnabled) filters.push('grayscale(1)', 'contrast(1.08)');
     if (filters.length) ctx.filter = filters.join(' ');
     ctx.drawImage(photo.working, x, y, w, h, 0, 0, canvas.width, canvas.height);
@@ -919,9 +866,9 @@
       ctx.drawImage(photo.working, x, y, w, h, -3, 0, canvas.width, canvas.height);
       ctx.restore();
     }
-    if (vhsEnabled && !bwEnabled) {
-      drawChromaGhost(photo, x, y, w, h, '#ff2a6d', -3);
-      drawChromaGhost(photo, x, y, w, h, '#05d9e8', 3);
+    if (sketchEnabled) {
+      drawSketchOverlay(photo, x, y, w, h);
+      renderSprayPaintSpecks();
     }
     if (glowEnabled) {
       ctx.save();
@@ -941,9 +888,7 @@
     const p = photos[currentIndex];
     const view = movementEnabled ? p.current : STATIC_VIEW;
     renderPhotoFrame(p, view);
-    if (oldFilmEnabled) renderFilmEffect();
     if (oldTvEnabled) renderTVEffect();
-    if (vhsEnabled) renderVhsTrackingEffect();
     if (vignetteEnabled) renderVignetteEffect();
     renderWatermark();
     hud.textContent = view.zoom.toFixed(2) + '×';
@@ -992,9 +937,7 @@
       hudZoom = viewB.zoom;
     }
 
-    if (oldFilmEnabled) renderFilmEffect();
     if (oldTvEnabled) renderTVEffect();
-    if (vhsEnabled) renderVhsTrackingEffect();
     if (vignetteEnabled) renderVignetteEffect();
     renderWatermark();
     hud.textContent = hudZoom.toFixed(2) + '×';
@@ -1262,13 +1205,6 @@
     if (photos.length && !isPlaying) renderStaticFrame();
   });
 
-  filmEffectBtn.addEventListener('click', () => {
-    pushHistory();
-    oldFilmEnabled = !oldFilmEnabled;
-    filmEffectBtn.setAttribute('aria-pressed', String(oldFilmEnabled));
-    if (photos.length && !isPlaying) renderStaticFrame();
-  });
-
   tvEffectBtn.addEventListener('click', () => {
     pushHistory();
     oldTvEnabled = !oldTvEnabled;
@@ -1297,10 +1233,10 @@
     if (photos.length && !isPlaying) renderStaticFrame();
   });
 
-  vhsEffectBtn.addEventListener('click', () => {
+  sketchEffectBtn.addEventListener('click', () => {
     pushHistory();
-    vhsEnabled = !vhsEnabled;
-    vhsEffectBtn.setAttribute('aria-pressed', String(vhsEnabled));
+    sketchEnabled = !sketchEnabled;
+    sketchEffectBtn.setAttribute('aria-pressed', String(sketchEnabled));
     if (photos.length && !isPlaying) renderStaticFrame();
   });
 
@@ -1542,7 +1478,7 @@
     const original = photos[selectedIndex].original;
     cropRect = { x: 0, y: 0, w: original.naturalWidth, h: original.naturalHeight };
     cropControls.classList.remove('hidden');
-    [playPauseBtn, resetBtn, clearAllBtn, recordBtn, cropStartBtn, filmEffectBtn, tvEffectBtn, bwEffectBtn, vignetteEffectBtn, glowEffectBtn, vhsEffectBtn, watermarkText, movementToggle, aspectSelect, intensitySlider, speedSlider, photoDurationSlider, transitionSelect].forEach(el => el.disabled = true);
+    [playPauseBtn, resetBtn, clearAllBtn, recordBtn, cropStartBtn, tvEffectBtn, bwEffectBtn, vignetteEffectBtn, glowEffectBtn, sketchEffectBtn, watermarkText, movementToggle, aspectSelect, intensitySlider, speedSlider, photoDurationSlider, transitionSelect].forEach(el => el.disabled = true);
     thumbRow.classList.add('hidden-interact');
     thumbRow.style.pointerEvents = 'none';
     drawCropOverlay();
@@ -1553,7 +1489,7 @@
     cropDragMode = null;
     cropControls.classList.add('hidden');
     thumbRow.style.pointerEvents = '';
-    [playPauseBtn, resetBtn, clearAllBtn, cropStartBtn, filmEffectBtn, tvEffectBtn, bwEffectBtn, vignetteEffectBtn, glowEffectBtn, vhsEffectBtn, watermarkText, movementToggle, aspectSelect, intensitySlider, speedSlider, transitionSelect].forEach(el => el.disabled = false);
+    [playPauseBtn, resetBtn, clearAllBtn, cropStartBtn, tvEffectBtn, bwEffectBtn, vignetteEffectBtn, glowEffectBtn, sketchEffectBtn, watermarkText, movementToggle, aspectSelect, intensitySlider, speedSlider, transitionSelect].forEach(el => el.disabled = false);
     photoDurationSlider.disabled = !photos.length;
     recordBtn.disabled = !supportsRecording();
   }
