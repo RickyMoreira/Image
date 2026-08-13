@@ -771,69 +771,51 @@
     ctx.restore();
   }
 
-  function getOrBuildSprayDots(photo) {
+  function getOrBuildSpraySources(photo) {
     const cw = canvas.width, ch = canvas.height;
-    if (photo._sprayDots && photo._sprayDots.w === cw && photo._sprayDots.h === ch) {
-      return photo._sprayDots.list;
+    if (photo._spraySources && photo._spraySources.w === cw && photo._spraySources.h === ch) {
+      return photo._spraySources.list;
     }
-    const cell = Math.max(10, Math.round(Math.min(cw, ch) * 0.018));
+    const count = 7 + Math.floor(Math.random() * 4);
     const list = [];
-    for (let gy = 0; gy < ch; gy += cell) {
-      for (let gx = 0; gx < cw; gx += cell) {
-        list.push({
-          x: gx + Math.random() * cell,
-          y: gy + Math.random() * cell,
-          r: cell * (0.55 + Math.random() * 0.55)
-        });
-      }
+    for (let i = 0; i < count; i++) {
+      list.push({
+        x: Math.random() * cw,
+        y: Math.random() * ch,
+        maxR: Math.max(cw, ch) * (0.4 + Math.random() * 0.3),
+        delay: Math.random() * 0.35
+      });
     }
-    for (let i = list.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [list[i], list[j]] = [list[j], list[i]];
-    }
-    photo._sprayDots = { w: cw, h: ch, list };
+    photo._spraySources = { w: cw, h: ch, list };
     return list;
   }
 
   function renderSprayBuild(photo, x, y, w, h, buildProgress) {
     const cw = canvas.width, ch = canvas.height;
-    ctx.fillStyle = '#1C1815';
-    ctx.fillRect(0, 0, cw, ch);
+    ctx.drawImage(photo.working, x, y, w, h, 0, 0, cw, ch);
 
-    const dots = getOrBuildSprayDots(photo);
-    const revealCount = Math.floor(buildProgress * dots.length);
+    if (buildProgress >= 1) return;
 
     maskCtx.clearRect(0, 0, cw, ch);
-    maskCtx.fillStyle = '#000';
-    for (let i = 0; i < revealCount; i++) {
-      const d = dots[i];
+    maskCtx.fillStyle = '#fff';
+    maskCtx.fillRect(0, 0, cw, ch);
+
+    const sources = getOrBuildSpraySources(photo);
+    maskCtx.save();
+    maskCtx.globalCompositeOperation = 'destination-out';
+    maskCtx.filter = 'blur(' + Math.round(cw * 0.03) + 'px)';
+    sources.forEach((s) => {
+      const localP = Math.max(0, Math.min(1, (buildProgress - s.delay) / (1 - s.delay)));
+      if (localP <= 0) return;
+      const r = s.maxR * easeInOutSine(localP);
       maskCtx.beginPath();
-      maskCtx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
+      maskCtx.arc(s.x, s.y, r, 0, Math.PI * 2);
+      maskCtx.fillStyle = '#000';
       maskCtx.fill();
-    }
+    });
+    maskCtx.restore();
 
-    tempCtx.clearRect(0, 0, cw, ch);
-    tempCtx.drawImage(photo.working, x, y, w, h, 0, 0, cw, ch);
-    tempCtx.globalCompositeOperation = 'destination-in';
-    tempCtx.drawImage(maskCanvas, 0, 0);
-    tempCtx.globalCompositeOperation = 'source-over';
-
-    ctx.drawImage(tempCanvas, 0, 0);
-
-    if (buildProgress < 1) {
-      const speckColors = ['#EFE6D8', '#0A0807', '#D14B2A'];
-      const frontierStart = Math.max(0, revealCount - 45);
-      for (let i = frontierStart; i < revealCount; i++) {
-        const d = dots[i];
-        ctx.save();
-        ctx.globalAlpha = 0.2 + Math.random() * 0.3;
-        ctx.fillStyle = speckColors[Math.floor(Math.random() * speckColors.length)];
-        ctx.beginPath();
-        ctx.arc(d.x + (Math.random() - 0.5) * d.r * 3, d.y + (Math.random() - 0.5) * d.r * 3, 1 + Math.random() * 3, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      }
-    }
+    ctx.drawImage(maskCanvas, 0, 0);
   }
 
   function getOrBuildSketchStrokes(photo) {
@@ -1491,7 +1473,7 @@
     canvas.height = h;
     canvas.style.aspectRatio = w + ' / ' + h;
     resizeEffectCanvases();
-    photos.forEach((p) => { p._sketchStrokes = null; p._sprayDots = null; });
+    photos.forEach((p) => { p._sketchStrokes = null; p._spraySources = null; });
     if (photos.length) {
       photos.forEach(computeCoverForPhoto);
       resetSequence();
