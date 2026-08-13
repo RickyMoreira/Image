@@ -818,84 +818,62 @@
     ctx.drawImage(maskCanvas, 0, 0);
   }
 
-  function getOrBuildSketchStrokes(photo) {
+  function getOrBuildSketchJitter(photo) {
     const cw = canvas.width, ch = canvas.height;
-    if (photo._sketchStrokes && photo._sketchStrokes.w === cw && photo._sketchStrokes.h === ch) {
-      return photo._sketchStrokes.list;
+    if (photo._sketchJitter && photo._sketchJitter.w === cw && photo._sketchJitter.h === ch) {
+      return photo._sketchJitter.samples;
     }
-    const strokes = [];
-    const strokeCount = 22;
-    for (let s = 0; s < strokeCount; s++) {
-      const points = [];
-      let px = Math.random() * cw, py = Math.random() * ch;
-      points.push({ x: px, y: py });
-      const steps = 12 + Math.floor(Math.random() * 16);
-      for (let i = 0; i < steps; i++) {
-        px = Math.max(0, Math.min(cw, px + (Math.random() - 0.5) * cw * 0.2));
-        py = Math.max(0, Math.min(ch, py + (Math.random() - 0.5) * ch * 0.2));
-        points.push({ x: px, y: py });
-      }
-      strokes.push(points);
-    }
-    photo._sketchStrokes = { w: cw, h: ch, list: strokes };
-    return strokes;
+    const sampleCount = 36;
+    const samples = [];
+    for (let i = 0; i < sampleCount; i++) samples.push((Math.random() - 0.5) * 2);
+    photo._sketchJitter = { w: cw, h: ch, samples };
+    return samples;
+  }
+
+  function sampleJitter(samples, t) {
+    const n = samples.length;
+    const pos = t * (n - 1);
+    const i0 = Math.floor(pos), i1 = Math.min(n - 1, i0 + 1);
+    const frac = pos - i0;
+    return samples[i0] * (1 - frac) + samples[i1] * frac;
   }
 
   function renderSketchBuild(photo, x, y, w, h, buildProgress) {
     const cw = canvas.width, ch = canvas.height;
-    ctx.fillStyle = '#EFE6D8';
-    ctx.fillRect(0, 0, cw, ch);
+    ctx.drawImage(photo.working, x, y, w, h, 0, 0, cw, ch);
 
-    const strokes = getOrBuildSketchStrokes(photo);
-    const totalSegments = strokes.reduce((s, st) => s + st.length - 1, 0);
-    const revealCount = Math.floor(buildProgress * totalSegments);
-    const frontierBudget = 22;
-    const frontierStart = Math.max(0, revealCount - frontierBudget);
+    if (buildProgress >= 1) return;
+
+    const diag = Math.hypot(cw, ch) * 1.15;
+    const jitterAmp = diag * 0.055;
+    const samples = getOrBuildSketchJitter(photo);
+    const threshold = diag - buildProgress * diag * 2.3;
 
     maskCtx.clearRect(0, 0, cw, ch);
-    maskCtx.strokeStyle = '#000';
-    maskCtx.lineWidth = Math.max(18, cw * 0.06);
-    maskCtx.lineCap = 'round';
-    maskCtx.lineJoin = 'round';
+    maskCtx.fillStyle = '#fff';
+    maskCtx.fillRect(0, 0, cw, ch);
 
-    const frontierSegs = [];
-    let drawnSoFar = 0;
-    outer:
-    for (const st of strokes) {
-      maskCtx.beginPath();
-      maskCtx.moveTo(st[0].x, st[0].y);
-      let any = false;
-      for (let i = 1; i < st.length; i++) {
-        if (drawnSoFar >= revealCount) break outer;
-        maskCtx.lineTo(st[i].x, st[i].y);
-        any = true;
-        if (drawnSoFar >= frontierStart) frontierSegs.push([st[i - 1], st[i]]);
-        drawnSoFar++;
-      }
-      if (any) maskCtx.stroke();
+    maskCtx.save();
+    maskCtx.translate(cw / 2, ch / 2);
+    maskCtx.rotate(-Math.PI / 4);
+    maskCtx.globalCompositeOperation = 'destination-out';
+
+    const steps = 40;
+    maskCtx.beginPath();
+    for (let i = 0; i <= steps; i++) {
+      const ty = -diag + (2 * diag) * (i / steps);
+      const jitter = sampleJitter(samples, i / steps) * jitterAmp;
+      const px = threshold + jitter;
+      if (i === 0) maskCtx.moveTo(px, ty); else maskCtx.lineTo(px, ty);
     }
+    maskCtx.lineTo(diag * 2, diag);
+    maskCtx.lineTo(diag * 2, -diag);
+    maskCtx.closePath();
+    maskCtx.fillStyle = '#000';
+    maskCtx.fill();
+    maskCtx.restore();
 
-    tempCtx.clearRect(0, 0, cw, ch);
-    tempCtx.drawImage(photo.working, x, y, w, h, 0, 0, cw, ch);
-    tempCtx.globalCompositeOperation = 'destination-in';
-    tempCtx.drawImage(maskCanvas, 0, 0);
-    tempCtx.globalCompositeOperation = 'source-over';
-
-    ctx.drawImage(tempCanvas, 0, 0);
-
-    if (buildProgress < 1 && frontierSegs.length) {
-      ctx.save();
-      ctx.strokeStyle = 'rgba(20,16,12,0.6)';
-      ctx.lineWidth = Math.max(2, cw * 0.0035);
-      ctx.lineCap = 'round';
-      frontierSegs.forEach(([a, b]) => {
-        ctx.beginPath();
-        ctx.moveTo(a.x, a.y);
-        ctx.lineTo(b.x, b.y);
-        ctx.stroke();
-      });
-      ctx.restore();
-    }
+    ctx.drawImage(maskCanvas, 0, 0);
   }
 
   function computeCover(imgW, imgH, cw, ch) {
@@ -1474,7 +1452,7 @@
     canvas.height = h;
     canvas.style.aspectRatio = w + ' / ' + h;
     resizeEffectCanvases();
-    photos.forEach((p) => { p._sketchStrokes = null; p._spraySources = null; });
+    photos.forEach((p) => { p._sketchJitter = null; p._spraySources = null; });
     if (photos.length) {
       photos.forEach(computeCoverForPhoto);
       resetSequence();
