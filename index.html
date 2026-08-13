@@ -448,7 +448,8 @@
           <button class="btn toggle" id="bwEffect" type="button" aria-pressed="false">Preto e branco</button>
           <button class="btn toggle" id="vignetteEffect" type="button" aria-pressed="false">Vinheta suave</button>
           <button class="btn toggle" id="glowEffect" type="button" aria-pressed="false">Brilho sonhador</button>
-          <button class="btn toggle" id="sketchEffect" type="button" aria-pressed="false">Spray &amp; Esboço</button>
+          <button class="btn toggle" id="sprayEffect" type="button" aria-pressed="false">Spray</button>
+          <button class="btn toggle" id="sketchEffect" type="button" aria-pressed="false">Esboço</button>
         </div>
       </div>
 
@@ -513,6 +514,7 @@
   const bwEffectBtn = document.getElementById('bwEffect');
   const vignetteEffectBtn = document.getElementById('vignetteEffect');
   const glowEffectBtn = document.getElementById('glowEffect');
+  const sprayEffectBtn = document.getElementById('sprayEffect');
   const sketchEffectBtn = document.getElementById('sketchEffect');
   const watermarkText = document.getElementById('watermarkText');
   const statusEl = document.getElementById('status');
@@ -534,7 +536,21 @@
   let vignetteEnabled = false;
   let glowEnabled = false;
   let sketchEnabled = false;
+  let sprayEnabled = false;
   let grainTiles = [];
+  const maskCanvas = document.createElement('canvas');
+  const maskCtx = maskCanvas.getContext('2d');
+  const tempCanvas = document.createElement('canvas');
+  const tempCtx = tempCanvas.getContext('2d');
+  const lineCanvas = document.createElement('canvas');
+  const lineCtx = lineCanvas.getContext('2d');
+
+  function resizeEffectCanvases() {
+    [maskCanvas, tempCanvas, lineCanvas].forEach((c) => {
+      c.width = canvas.width;
+      c.height = canvas.height;
+    });
+  }
   let scanlinePattern = null;
 
   let photos = [];           // { original, working, cover, current, target }
@@ -579,7 +595,7 @@
       duration,
       transitionType,
       oldTvEnabled, movementEnabled,
-      bwEnabled, vignetteEnabled, glowEnabled, sketchEnabled,
+      bwEnabled, vignetteEnabled, glowEnabled, sketchEnabled, sprayEnabled,
       watermarkTextValue: watermarkText.value
     };
   }
@@ -632,6 +648,8 @@
     glowEffectBtn.setAttribute('aria-pressed', String(glowEnabled));
     sketchEnabled = snap.sketchEnabled;
     sketchEffectBtn.setAttribute('aria-pressed', String(sketchEnabled));
+    sprayEnabled = snap.sprayEnabled;
+    sprayEffectBtn.setAttribute('aria-pressed', String(sprayEnabled));
     watermarkText.value = snap.watermarkTextValue;
 
     if (!photos.length) {
@@ -755,27 +773,136 @@
     ctx.restore();
   }
 
-  function renderSprayPaintSpecks() {
-    const w = canvas.width, h = canvas.height;
-    const colors = ['rgba(255,255,255,0.5)', 'rgba(10,8,7,0.4)', 'rgba(209,75,42,0.35)'];
-    const speckCount = 10 + Math.floor(Math.random() * 14);
-    for (let i = 0; i < speckCount; i++) {
-      const dx = Math.random() * w, dy = Math.random() * h;
-      const r = 1.5 + Math.random() * 5;
-      ctx.fillStyle = colors[Math.floor(Math.random() * colors.length)];
+  function getOrBuildSprayDots(photo) {
+    const cw = canvas.width, ch = canvas.height;
+    if (photo._sprayDots && photo._sprayDots.w === cw && photo._sprayDots.h === ch) {
+      return photo._sprayDots.list;
+    }
+    const cell = Math.max(10, Math.round(Math.min(cw, ch) * 0.018));
+    const list = [];
+    for (let gy = 0; gy < ch; gy += cell) {
+      for (let gx = 0; gx < cw; gx += cell) {
+        list.push({
+          x: gx + Math.random() * cell,
+          y: gy + Math.random() * cell,
+          r: cell * (0.55 + Math.random() * 0.55)
+        });
+      }
+    }
+    for (let i = list.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [list[i], list[j]] = [list[j], list[i]];
+    }
+    photo._sprayDots = { w: cw, h: ch, list };
+    return list;
+  }
+
+  function renderSprayBuild(photo, x, y, w, h, buildProgress) {
+    const cw = canvas.width, ch = canvas.height;
+    ctx.fillStyle = '#1C1815';
+    ctx.fillRect(0, 0, cw, ch);
+
+    const dots = getOrBuildSprayDots(photo);
+    const revealCount = Math.floor(buildProgress * dots.length);
+
+    maskCtx.clearRect(0, 0, cw, ch);
+    maskCtx.fillStyle = '#000';
+    for (let i = 0; i < revealCount; i++) {
+      const d = dots[i];
+      maskCtx.beginPath();
+      maskCtx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
+      maskCtx.fill();
+    }
+
+    tempCtx.clearRect(0, 0, cw, ch);
+    tempCtx.save();
+    tempCtx.filter = 'saturate(1.5) contrast(1.2)';
+    tempCtx.drawImage(photo.working, x, y, w, h, 0, 0, cw, ch);
+    tempCtx.restore();
+    tempCtx.globalCompositeOperation = 'destination-in';
+    tempCtx.drawImage(maskCanvas, 0, 0);
+    tempCtx.globalCompositeOperation = 'source-over';
+
+    ctx.drawImage(tempCanvas, 0, 0);
+
+    const speckColors = ['#EFE6D8', '#0A0807', '#D14B2A'];
+    const frontierStart = Math.max(0, revealCount - 45);
+    for (let i = frontierStart; i < revealCount; i++) {
+      const d = dots[i];
+      ctx.save();
+      ctx.globalAlpha = 0.2 + Math.random() * 0.3;
+      ctx.fillStyle = speckColors[Math.floor(Math.random() * speckColors.length)];
       ctx.beginPath();
-      ctx.arc(dx, dy, r, 0, Math.PI * 2);
+      ctx.arc(d.x + (Math.random() - 0.5) * d.r * 3, d.y + (Math.random() - 0.5) * d.r * 3, 1 + Math.random() * 3, 0, Math.PI * 2);
       ctx.fill();
+      ctx.restore();
     }
   }
 
-  function drawSketchOverlay(photo, x, y, w, h) {
-    ctx.save();
-    ctx.filter = 'grayscale(1) invert(1) blur(5px)';
-    ctx.globalCompositeOperation = 'color-dodge';
-    ctx.globalAlpha = 0.85;
-    ctx.drawImage(photo.working, x, y, w, h, 0, 0, canvas.width, canvas.height);
-    ctx.restore();
+  function getOrBuildSketchStrokes(photo) {
+    const cw = canvas.width, ch = canvas.height;
+    if (photo._sketchStrokes && photo._sketchStrokes.w === cw && photo._sketchStrokes.h === ch) {
+      return photo._sketchStrokes.list;
+    }
+    const strokes = [];
+    const strokeCount = 28;
+    for (let s = 0; s < strokeCount; s++) {
+      const points = [];
+      let px = Math.random() * cw, py = Math.random() * ch;
+      points.push({ x: px, y: py });
+      const steps = 12 + Math.floor(Math.random() * 16);
+      for (let i = 0; i < steps; i++) {
+        px = Math.max(0, Math.min(cw, px + (Math.random() - 0.5) * cw * 0.16));
+        py = Math.max(0, Math.min(ch, py + (Math.random() - 0.5) * ch * 0.16));
+        points.push({ x: px, y: py });
+      }
+      strokes.push(points);
+    }
+    photo._sketchStrokes = { w: cw, h: ch, list: strokes };
+    return strokes;
+  }
+
+  function renderSketchBuild(photo, x, y, w, h, buildProgress) {
+    const cw = canvas.width, ch = canvas.height;
+    ctx.fillStyle = '#EFE6D8';
+    ctx.fillRect(0, 0, cw, ch);
+
+    const strokes = getOrBuildSketchStrokes(photo);
+    const totalSegments = strokes.reduce((s, st) => s + st.length - 1, 0);
+    let remaining = Math.floor(buildProgress * totalSegments);
+
+    maskCtx.clearRect(0, 0, cw, ch);
+    maskCtx.strokeStyle = '#000';
+    maskCtx.lineWidth = Math.max(10, cw * 0.03);
+    maskCtx.lineCap = 'round';
+    maskCtx.lineJoin = 'round';
+    for (const st of strokes) {
+      if (remaining <= 0) break;
+      maskCtx.beginPath();
+      maskCtx.moveTo(st[0].x, st[0].y);
+      for (let i = 1; i < st.length && remaining > 0; i++) {
+        maskCtx.lineTo(st[i].x, st[i].y);
+        remaining--;
+      }
+      maskCtx.stroke();
+    }
+
+    lineCtx.clearRect(0, 0, cw, ch);
+    lineCtx.fillStyle = '#fff';
+    lineCtx.fillRect(0, 0, cw, ch);
+    lineCtx.save();
+    lineCtx.filter = 'grayscale(1) invert(1) blur(4px)';
+    lineCtx.globalCompositeOperation = 'color-dodge';
+    lineCtx.drawImage(photo.working, x, y, w, h, 0, 0, cw, ch);
+    lineCtx.restore();
+
+    tempCtx.clearRect(0, 0, cw, ch);
+    tempCtx.drawImage(lineCanvas, 0, 0);
+    tempCtx.globalCompositeOperation = 'destination-in';
+    tempCtx.drawImage(maskCanvas, 0, 0);
+    tempCtx.globalCompositeOperation = 'source-over';
+
+    ctx.drawImage(tempCanvas, 0, 0);
   }
 
   function computeCover(imgW, imgH, cw, ch) {
@@ -845,16 +972,26 @@
     updateControlsAvailability();
   }
 
-  function renderPhotoFrame(photo, view) {
+  function renderPhotoFrame(photo, view, buildProgress) {
+    if (buildProgress === undefined) buildProgress = 1;
     const cover = photo.cover;
     const w = cover.cropW / view.zoom;
     const h = cover.cropH / view.zoom;
     const x = cover.cropX + (cover.cropW - w) * view.cx;
     const y = cover.cropY + (cover.cropH - h) * view.cy;
+
+    if (sketchEnabled) {
+      renderSketchBuild(photo, x, y, w, h, buildProgress);
+      return;
+    }
+    if (sprayEnabled) {
+      renderSprayBuild(photo, x, y, w, h, buildProgress);
+      return;
+    }
+
     ctx.save();
     const filters = [];
     if (oldTvEnabled) filters.push('contrast(1.12)', 'saturate(0.8)', 'brightness(1.03)');
-    if (sketchEnabled) filters.push('saturate(1.4)', 'contrast(1.25)');
     if (bwEnabled) filters.push('grayscale(1)', 'contrast(1.08)');
     if (filters.length) ctx.filter = filters.join(' ');
     ctx.drawImage(photo.working, x, y, w, h, 0, 0, canvas.width, canvas.height);
@@ -865,10 +1002,6 @@
       ctx.globalAlpha = 0.1;
       ctx.drawImage(photo.working, x, y, w, h, -3, 0, canvas.width, canvas.height);
       ctx.restore();
-    }
-    if (sketchEnabled) {
-      drawSketchOverlay(photo, x, y, w, h);
-      renderSprayPaintSpecks();
     }
     if (glowEnabled) {
       ctx.save();
@@ -887,12 +1020,14 @@
     if (!photos.length) return;
     const p = photos[currentIndex];
     const view = movementEnabled ? p.current : STATIC_VIEW;
-    renderPhotoFrame(p, view);
+    renderPhotoFrame(p, view, 1);
     if (oldTvEnabled) renderTVEffect();
     if (vignetteEnabled) renderVignetteEffect();
     renderWatermark();
     hud.textContent = view.zoom.toFixed(2) + '×';
   }
+
+  const BUILD_FRACTION = 0.6;
 
   function tick(now) {
     if (phaseStart === null) phaseStart = now - pausedElapsed;
@@ -911,7 +1046,10 @@
         cx: lerp(p.current.cx, p.target.cx, e),
         cy: lerp(p.current.cy, p.target.cy, e)
       } : STATIC_VIEW;
-      renderPhotoFrame(p, view);
+      const buildProgress = (sketchEnabled || sprayEnabled)
+        ? easeInOutSine(Math.min(t / BUILD_FRACTION, 1))
+        : 1;
+      renderPhotoFrame(p, view, buildProgress);
       hudZoom = view.zoom;
     } else {
       const pA = photos[currentIndex];
@@ -921,17 +1059,17 @@
       if (transitionType === 'slide') {
         ctx.save();
         ctx.translate(-e * canvas.width, 0);
-        renderPhotoFrame(pA, viewA);
+        renderPhotoFrame(pA, viewA, 1);
         ctx.restore();
         ctx.save();
         ctx.translate((1 - e) * canvas.width, 0);
-        renderPhotoFrame(pB, viewB);
+        renderPhotoFrame(pB, viewB, 1);
         ctx.restore();
       } else {
-        renderPhotoFrame(pA, viewA);
+        renderPhotoFrame(pA, viewA, 1);
         ctx.save();
         ctx.globalAlpha = e;
-        renderPhotoFrame(pB, viewB);
+        renderPhotoFrame(pB, viewB, 1);
         ctx.restore();
       }
       hudZoom = viewB.zoom;
@@ -1236,7 +1374,16 @@
   sketchEffectBtn.addEventListener('click', () => {
     pushHistory();
     sketchEnabled = !sketchEnabled;
+    if (sketchEnabled) { sprayEnabled = false; sprayEffectBtn.setAttribute('aria-pressed', 'false'); }
     sketchEffectBtn.setAttribute('aria-pressed', String(sketchEnabled));
+    if (photos.length && !isPlaying) renderStaticFrame();
+  });
+
+  sprayEffectBtn.addEventListener('click', () => {
+    pushHistory();
+    sprayEnabled = !sprayEnabled;
+    if (sprayEnabled) { sketchEnabled = false; sketchEffectBtn.setAttribute('aria-pressed', 'false'); }
+    sprayEffectBtn.setAttribute('aria-pressed', String(sprayEnabled));
     if (photos.length && !isPlaying) renderStaticFrame();
   });
 
@@ -1332,6 +1479,8 @@
     canvas.width = w;
     canvas.height = h;
     canvas.style.aspectRatio = w + ' / ' + h;
+    resizeEffectCanvases();
+    photos.forEach((p) => { p._sketchStrokes = null; p._sprayDots = null; });
     if (photos.length) {
       photos.forEach(computeCoverForPhoto);
       resetSequence();
@@ -1478,7 +1627,7 @@
     const original = photos[selectedIndex].original;
     cropRect = { x: 0, y: 0, w: original.naturalWidth, h: original.naturalHeight };
     cropControls.classList.remove('hidden');
-    [playPauseBtn, resetBtn, clearAllBtn, recordBtn, cropStartBtn, tvEffectBtn, bwEffectBtn, vignetteEffectBtn, glowEffectBtn, sketchEffectBtn, watermarkText, movementToggle, aspectSelect, intensitySlider, speedSlider, photoDurationSlider, transitionSelect].forEach(el => el.disabled = true);
+    [playPauseBtn, resetBtn, clearAllBtn, recordBtn, cropStartBtn, tvEffectBtn, bwEffectBtn, vignetteEffectBtn, glowEffectBtn, sketchEffectBtn, sprayEffectBtn, watermarkText, movementToggle, aspectSelect, intensitySlider, speedSlider, photoDurationSlider, transitionSelect].forEach(el => el.disabled = true);
     thumbRow.classList.add('hidden-interact');
     thumbRow.style.pointerEvents = 'none';
     drawCropOverlay();
@@ -1489,7 +1638,7 @@
     cropDragMode = null;
     cropControls.classList.add('hidden');
     thumbRow.style.pointerEvents = '';
-    [playPauseBtn, resetBtn, clearAllBtn, cropStartBtn, tvEffectBtn, bwEffectBtn, vignetteEffectBtn, glowEffectBtn, sketchEffectBtn, watermarkText, movementToggle, aspectSelect, intensitySlider, speedSlider, transitionSelect].forEach(el => el.disabled = false);
+    [playPauseBtn, resetBtn, clearAllBtn, cropStartBtn, tvEffectBtn, bwEffectBtn, vignetteEffectBtn, glowEffectBtn, sketchEffectBtn, sprayEffectBtn, watermarkText, movementToggle, aspectSelect, intensitySlider, speedSlider, transitionSelect].forEach(el => el.disabled = false);
     photoDurationSlider.disabled = !photos.length;
     recordBtn.disabled = !supportsRecording();
   }
